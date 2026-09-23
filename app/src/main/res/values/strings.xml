@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">锁屏日程</string>
+    <string name="xposed_description">在 HyperOS 锁屏上显示接下来的系统日历日程</string>
+</resources>

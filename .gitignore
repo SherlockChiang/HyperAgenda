@@ -1,0 +1,27 @@
+# Gradle and Android build output
+.gradle/
+.kotlin/
+build/
+*/build/
+
+# Local machine configuration
+local.properties
+.idea/
+.vscode/
+*.iml
+
+# Local SDK/runtime probes and generated analysis data
+.sdk-platform-*/
+sandboxprobe/
+device-dex/
+
+# Device captures and private test artifacts
+device-*.apk
+device-*.png
+device-*.xml
+qa-*.png
+qa-*.xml
+
+# Generated binaries and logs
+*.log
+*.hprof

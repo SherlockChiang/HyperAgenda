@@ -1,0 +1,1 @@
+-keep class com.vince.hyperagenda.xposed.** { *; }
