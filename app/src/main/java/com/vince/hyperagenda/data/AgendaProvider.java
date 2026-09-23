@@ -40,11 +40,23 @@ public final class AgendaProvider extends ContentProvider {
     };
 
     private boolean observerRegistered;
+    private ContentObserver calendarObserver;
 
     @Override
     public boolean onCreate() {
         ensureCalendarObserver();
         return true;
+    }
+
+    @Override
+    public void shutdown() {
+        Context context = getContext();
+        if (calendarObserver != null && context != null) {
+            context.getContentResolver().unregisterContentObserver(calendarObserver);
+        }
+        calendarObserver = null;
+        observerRegistered = false;
+        super.shutdown();
     }
 
     @Override
@@ -214,7 +226,10 @@ public final class AgendaProvider extends ContentProvider {
                     // Some provider implementations may reject a secondary URI.
                 }
             }
-            observerRegistered = registered > 0;
+            if (registered > 0) {
+                calendarObserver = observer;
+                observerRegistered = true;
+            }
         } catch (SecurityException ignored) {
             observerRegistered = false;
         }
