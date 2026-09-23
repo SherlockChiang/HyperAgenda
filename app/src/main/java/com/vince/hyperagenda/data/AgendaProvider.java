@@ -50,6 +50,7 @@ public final class AgendaProvider extends ContentProvider {
     @Override
     public Cursor query(Uri uri, String[] projection, String selection,
                         String[] selectionArgs, String sortOrder) {
+        enforceAgendaUri(uri);
         enforceAllowedCaller();
         MatrixCursor output = new MatrixCursor(OUTPUT_COLUMNS);
         Context context = attachedContext();
@@ -158,22 +159,36 @@ public final class AgendaProvider extends ContentProvider {
 
     @Override
     public String getType(Uri uri) {
+        enforceAgendaUri(uri);
+        enforceAllowedCaller();
         return "vnd.android.cursor.dir/vnd.hyperagenda.event";
     }
 
     @Override
     public Uri insert(Uri uri, ContentValues values) {
+        enforceAgendaUri(uri);
+        enforceAllowedCaller();
         throw new UnsupportedOperationException("Read only");
     }
 
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
+        enforceAgendaUri(uri);
+        enforceAllowedCaller();
         throw new UnsupportedOperationException("Read only");
     }
 
     @Override
     public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
+        enforceAgendaUri(uri);
+        enforceAllowedCaller();
         throw new UnsupportedOperationException("Read only");
+    }
+
+    private void enforceAgendaUri(Uri uri) {
+        if (!AgendaContract.CONTENT_URI.equals(uri)) {
+            throw new IllegalArgumentException("Unsupported agenda URI: " + uri);
+        }
     }
 
     private void ensureCalendarObserver() {
