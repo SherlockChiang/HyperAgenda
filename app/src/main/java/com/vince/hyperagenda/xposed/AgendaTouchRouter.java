@@ -45,6 +45,9 @@ final class AgendaTouchRouter extends XC_MethodHook {
         MotionEvent event = (MotionEvent) param.args[0];
         int action = event.getActionMasked();
         try {
+            if (downEvent != null && rootRef.get() != root) {
+                clear();
+            }
             if (action == MotionEvent.ACTION_DOWN) {
                 cancelTarget(event);
                 clear();
