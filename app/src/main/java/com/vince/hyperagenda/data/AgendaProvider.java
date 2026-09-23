@@ -16,7 +16,10 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.CalendarContract;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 
 public final class AgendaProvider extends ContentProvider {
     private static final Uri[] CALENDAR_OBSERVED_URIS = {
@@ -82,8 +85,8 @@ public final class AgendaProvider extends ContentProvider {
             if (cursor == null) {
                 return output;
             }
-            int added = 0;
-            while (cursor.moveToNext() && added < maxEvents) {
+            List<CalendarRow> rows = new ArrayList<>();
+            while (cursor.moveToNext()) {
                 long end = cursor.getLong(4);
                 int status = cursor.getInt(7);
                 int attendeeStatus = cursor.getInt(8);
@@ -100,16 +103,19 @@ public final class AgendaProvider extends ContentProvider {
                 String location = showTitles && rawLocation != null
                         ? rawLocation.trim()
                         : "";
-                output.addRow(new Object[]{
+                rows.add(new CalendarRow(
                         cursor.getLong(0),
                         title,
                         location,
                         cursor.getLong(3),
                         end,
                         cursor.getInt(5),
-                        cursor.getInt(6)
-                });
-                added++;
+                        cursor.getInt(6)));
+            }
+            rows.sort(Comparator.comparingLong((CalendarRow row) -> row.begin)
+                    .thenComparingLong(row -> row.id));
+            for (int i = 0; i < Math.min(maxEvents, rows.size()); i++) {
+                output.addRow(rows.get(i).toObjectArray());
             }
         } catch (SecurityException ignored) {
             // Permission may have been revoked while the provider was alive.
@@ -222,6 +228,31 @@ public final class AgendaProvider extends ContentProvider {
 
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static final class CalendarRow {
+        final long id;
+        final String title;
+        final String location;
+        final long begin;
+        final long end;
+        final int allDay;
+        final int color;
+
+        CalendarRow(long id, String title, String location, long begin, long end,
+                    int allDay, int color) {
+            this.id = id;
+            this.title = title;
+            this.location = location;
+            this.begin = begin;
+            this.end = end;
+            this.allDay = allDay;
+            this.color = color;
+        }
+
+        Object[] toObjectArray() {
+            return new Object[]{id, title, location, begin, end, allDay, color};
+        }
     }
 
 }
