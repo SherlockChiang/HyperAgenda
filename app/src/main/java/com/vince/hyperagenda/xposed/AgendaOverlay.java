@@ -456,6 +456,9 @@ final class AgendaOverlay {
             filter.addAction(Intent.ACTION_SCREEN_OFF);
             filter.addAction(Intent.ACTION_USER_PRESENT);
             filter.addAction(Intent.ACTION_TIME_TICK);
+            filter.addAction(Intent.ACTION_TIME_CHANGED);
+            filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+            filter.addAction(Intent.ACTION_LOCALE_CHANGED);
             filter.addAction(Intent.ACTION_DATE_CHANGED);
             BroadcastReceiver receiver = new BroadcastReceiver() {
                 @Override

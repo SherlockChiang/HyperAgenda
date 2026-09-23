@@ -19,6 +19,13 @@ import android.provider.CalendarContract;
 import java.util.Arrays;
 
 public final class AgendaProvider extends ContentProvider {
+    private static final Uri[] CALENDAR_OBSERVED_URIS = {
+            CalendarContract.Events.CONTENT_URI,
+            CalendarContract.Instances.CONTENT_URI,
+            CalendarContract.Calendars.CONTENT_URI,
+            CalendarContract.Attendees.CONTENT_URI
+    };
+
     private static final String[] OUTPUT_COLUMNS = {
             AgendaContract.COL_EVENT_ID,
             AgendaContract.COL_TITLE,
@@ -171,16 +178,22 @@ public final class AgendaProvider extends ContentProvider {
             return;
         }
         try {
-            context.getContentResolver().registerContentObserver(
-                    CalendarContract.Events.CONTENT_URI,
-                    true,
-                    new ContentObserver(new Handler(Looper.getMainLooper())) {
-                        @Override
-                        public void onChange(boolean selfChange) {
-                            context.getContentResolver().notifyChange(AgendaContract.CONTENT_URI, null);
-                        }
-                    });
-            observerRegistered = true;
+            ContentObserver observer = new ContentObserver(new Handler(Looper.getMainLooper())) {
+                @Override
+                public void onChange(boolean selfChange) {
+                    context.getContentResolver().notifyChange(AgendaContract.CONTENT_URI, null);
+                }
+            };
+            int registered = 0;
+            for (Uri uri : CALENDAR_OBSERVED_URIS) {
+                try {
+                    context.getContentResolver().registerContentObserver(uri, true, observer);
+                    registered++;
+                } catch (SecurityException ignored) {
+                    // Some provider implementations may reject a secondary URI.
+                }
+            }
+            observerRegistered = registered > 0;
         } catch (SecurityException ignored) {
             observerRegistered = false;
         }
