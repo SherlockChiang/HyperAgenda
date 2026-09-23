@@ -1,10 +1,8 @@
 package com.vince.hyperagenda.xposed;
 
 import android.app.KeyguardManager;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
-import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -23,7 +21,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
-import android.provider.CalendarContract;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -52,8 +49,6 @@ import de.robv.android.xposed.XposedHelpers;
 
 final class AgendaOverlay {
     private static final String TAG = "hyperagenda_lock_screen_overlay";
-    private static final String CALENDAR_PACKAGE = "com.android.calendar";
-    private static final String EVENT_MIME_TYPE = "vnd.android.cursor.item/event";
     private static final float MIN_VISIBLE_CLOCK_ALPHA = 0.60f;
     private static final long BOUNCER_SCAN_INTERVAL_MS = 50L;
     private static final String KEYGUARD_INFO_LAYER_VIEW_ID = "keyguard_info_layer";
@@ -513,7 +508,7 @@ final class AgendaOverlay {
                                 AgendaContract.DEFAULT_CLOCK_GAP_DP);
                 reportHook(resolver, context);
 
-                List<EventData> events = enabled ? queryEvents(resolver) : new ArrayList<>();
+                List<AgendaEvent> events = enabled ? queryEvents(resolver) : new ArrayList<>();
                 MAIN.post(() -> render(context, enabled, gap, openOnClick, events));
             } catch (Throwable error) {
                 XposedBridge.log("HyperAgenda: refresh failed: " + error);
@@ -527,8 +522,8 @@ final class AgendaOverlay {
         });
     }
 
-    private static List<EventData> queryEvents(ContentResolver resolver) {
-        List<EventData> events = new ArrayList<>();
+    private static List<AgendaEvent> queryEvents(ContentResolver resolver) {
+        List<AgendaEvent> events = new ArrayList<>();
         try (Cursor cursor = resolver.query(AgendaContract.CONTENT_URI, null, null, null, null)) {
             if (cursor == null) {
                 return events;
@@ -541,7 +536,7 @@ final class AgendaOverlay {
             int allDayIndex = cursor.getColumnIndexOrThrow(AgendaContract.COL_ALL_DAY);
             int colorIndex = cursor.getColumnIndexOrThrow(AgendaContract.COL_COLOR);
             while (cursor.moveToNext()) {
-                events.add(new EventData(
+                events.add(new AgendaEvent(
                         cursor.getLong(idIndex),
                         cursor.getString(titleIndex),
                         cursor.getString(locationIndex),
@@ -570,7 +565,7 @@ final class AgendaOverlay {
     }
 
     private static void render(Context context, boolean enabled, int gap,
-                               boolean openOnClick, List<EventData> events) {
+                               boolean openOnClick, List<AgendaEvent> events) {
         LinearLayout overlay = overlayRef.get();
         if (overlay == null) {
             return;
@@ -588,7 +583,7 @@ final class AgendaOverlay {
 
         long now = System.currentTimeMillis();
         for (int i = 0; i < events.size(); i++) {
-            EventData event = events.get(i);
+            AgendaEvent event = events.get(i);
             LinearLayout row = new LinearLayout(context);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
@@ -1100,7 +1095,7 @@ final class AgendaOverlay {
         }
     }
 
-    private static String formatStart(EventData event, long now) {
+    private static String formatStart(AgendaEvent event, long now) {
         Locale locale = Locale.getDefault();
         if (event.allDay) {
             return "全天";
@@ -1114,106 +1109,11 @@ final class AgendaOverlay {
         return new SimpleDateFormat(pattern, locale).format(new Date(event.begin));
     }
 
-    private static void openCalendarEvent(Context context, EventData event) {
+    private static void openCalendarEvent(Context context, AgendaEvent event) {
         XposedBridge.log("HyperAgenda: event clicked id=" + event.id);
         launchSuppressedUntilUptime = SystemClock.uptimeMillis() + 1500L;
         setOverlayVisible(false);
-        try {
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(
-                    ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, event.id),
-                    EVENT_MIME_TYPE);
-            intent.setPackage(CALENDAR_PACKAGE);
-            intent.addCategory(Intent.CATEGORY_DEFAULT);
-            intent.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, event.begin);
-            intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, event.end);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-
-            int requestCode = (int) (event.id ^ (event.id >>> 32));
-            PendingIntent pendingIntent = PendingIntent.getActivity(
-                    context,
-                    requestCode,
-                    intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-            Object activityStarter = findActivityStarter(context);
-            if (activityStarter != null) {
-                if (callActivityStarter(activityStarter,
-                        "startPendingIntentDismissingKeyguard", pendingIntent)) {
-                    XposedBridge.log("HyperAgenda: event queued via "
-                            + "startPendingIntentDismissingKeyguard id=" + event.id);
-                    return;
-                }
-                if (callActivityStarter(activityStarter,
-                        "postStartActivityDismissingKeyguard", pendingIntent)) {
-                    XposedBridge.log("HyperAgenda: event queued via "
-                            + "postStartActivityDismissingKeyguard id=" + event.id);
-                    return;
-                }
-                if (callActivityStarter(activityStarter, "startActivity", intent, true)) {
-                    XposedBridge.log("HyperAgenda: event queued via startActivity fallback id="
-                            + event.id);
-                    return;
-                }
-            }
-
-            pendingIntent.send();
-            XposedBridge.log("HyperAgenda: event sent directly behind keyguard id=" + event.id);
-        } catch (Throwable error) {
-            XposedBridge.log("HyperAgenda: cannot open calendar event " + event.id + ": " + error);
-        }
-    }
-
-    private static Object findActivityStarter(Context context) {
-        ClassLoader loader = context.getClassLoader();
-        Class<?> activityStarterClass = XposedHelpers.findClassIfExists(
-                "com.android.systemui.plugins.ActivityStarter", loader);
-        if (activityStarterClass == null) {
-            XposedBridge.log("HyperAgenda: ActivityStarter class unavailable");
-            return null;
-        }
-
-        try {
-            Class<?> interfacesManager = XposedHelpers.findClassIfExists(
-                    "com.miui.systemui.interfacesmanager.InterfacesImplManager", loader);
-            if (interfacesManager != null) {
-                Object starter = XposedHelpers.callStaticMethod(
-                        interfacesManager, "getImpl", activityStarterClass);
-                if (starter != null) {
-                    XposedBridge.log("HyperAgenda: ActivityStarter source=interfaces-manager");
-                    return starter;
-                }
-            }
-        } catch (Throwable error) {
-            XposedBridge.log("HyperAgenda: InterfacesImplManager lookup failed: " + error);
-        }
-
-        try {
-            Class<?> dependency = XposedHelpers.findClassIfExists(
-                    "com.android.systemui.Dependency", loader);
-            if (dependency != null) {
-                Object starter = XposedHelpers.callStaticMethod(
-                        dependency, "get", activityStarterClass);
-                if (starter != null) {
-                    XposedBridge.log("HyperAgenda: ActivityStarter source=dependency");
-                    return starter;
-                }
-            }
-        } catch (Throwable error) {
-            XposedBridge.log("HyperAgenda: Dependency lookup failed: " + error);
-        }
-        return null;
-    }
-
-    private static boolean callActivityStarter(Object activityStarter, String method,
-                                               Object... arguments) {
-        try {
-            XposedHelpers.callMethod(activityStarter, method, arguments);
-            return true;
-        } catch (Throwable error) {
-            XposedBridge.log("HyperAgenda: ActivityStarter." + method + " failed: " + error);
-            return false;
-        }
+        AgendaEventLauncher.open(context, event);
     }
 
     private static RippleDrawable createRippleBackground(Context context) {
@@ -1408,24 +1308,4 @@ final class AgendaOverlay {
         }
     }
 
-    private static final class EventData {
-        final long id;
-        final String title;
-        final String location;
-        final long begin;
-        final long end;
-        final boolean allDay;
-        final int color;
-
-        EventData(long id, String title, String location, long begin, long end,
-                  boolean allDay, int color) {
-            this.id = id;
-            this.title = title;
-            this.location = location;
-            this.begin = begin;
-            this.end = end;
-            this.allDay = allDay;
-            this.color = color;
-        }
-    }
 }
