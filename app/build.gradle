@@ -6,6 +6,16 @@ android {
     namespace 'com.vince.hyperagenda'
     compileSdkVersion 'android-37.0'
 
+    signingConfigs {
+        release {
+            // Keep the release artifact upgrade-compatible with the installed module.
+            storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
     defaultConfig {
         applicationId 'com.vince.hyperagenda'
         minSdk 26
@@ -17,6 +27,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
