@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.PriorityQueue;
 
 public final class AgendaProvider extends ContentProvider {
     private static final Uri[] CALENDAR_OBSERVED_URIS = {
@@ -98,7 +99,11 @@ public final class AgendaProvider extends ContentProvider {
             if (cursor == null) {
                 return output;
             }
-            List<CalendarRow> rows = new ArrayList<>();
+            Comparator<CalendarRow> earliestFirst = Comparator
+                    .comparingLong((CalendarRow row) -> row.begin)
+                    .thenComparingLong(row -> row.id);
+            PriorityQueue<CalendarRow> rows = new PriorityQueue<>(
+                    maxEvents, earliestFirst.reversed());
             while (cursor.moveToNext()) {
                 long end = cursor.getLong(4);
                 int status = cursor.getInt(7);
@@ -116,19 +121,25 @@ public final class AgendaProvider extends ContentProvider {
                 String location = showTitles && rawLocation != null
                         ? rawLocation.trim()
                         : "";
-                rows.add(new CalendarRow(
+                CalendarRow row = new CalendarRow(
                         cursor.getLong(0),
                         title,
                         location,
                         cursor.getLong(3),
                         end,
                         cursor.getInt(5),
-                        cursor.getInt(6)));
+                        cursor.getInt(6));
+                if (rows.size() < maxEvents) {
+                    rows.add(row);
+                } else if (earliestFirst.compare(row, rows.peek()) < 0) {
+                    rows.poll();
+                    rows.add(row);
+                }
             }
-            rows.sort(Comparator.comparingLong((CalendarRow row) -> row.begin)
-                    .thenComparingLong(row -> row.id));
-            for (int i = 0; i < Math.min(maxEvents, rows.size()); i++) {
-                output.addRow(rows.get(i).toObjectArray());
+            List<CalendarRow> sortedRows = new ArrayList<>(rows);
+            sortedRows.sort(earliestFirst);
+            for (CalendarRow row : sortedRows) {
+                output.addRow(row.toObjectArray());
             }
         } catch (SecurityException ignored) {
             // Permission may have been revoked while the provider was alive.
