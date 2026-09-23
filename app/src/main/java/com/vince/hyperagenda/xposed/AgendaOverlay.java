@@ -169,7 +169,7 @@ final class AgendaOverlay {
         }
         updatePosition();
         LinearLayout overlay = overlayRef.get();
-        return overlay != null && target.getParent() == overlay
+        return openOnLockscreenClick && overlay != null && target.getParent() == overlay
                 && overlay.getParent() == injectionHostRef.get()
                 && target.isEnabled() && target.isClickable()
                 && isEffectivelyVisible(target, root);
@@ -573,13 +573,12 @@ final class AgendaOverlay {
         clockGapDp = Math.max(0, Math.min(64, gap));
         openOnLockscreenClick = openOnClick;
         contentAvailable = enabled && !events.isEmpty();
+        overlay.removeAllViews();
 
         if (!contentAvailable || !shouldShowOnKeyguard(context)) {
             overlay.setVisibility(View.GONE);
             return;
         }
-
-        overlay.removeAllViews();
 
         long now = System.currentTimeMillis();
         for (int i = 0; i < events.size(); i++) {
@@ -1110,6 +1109,9 @@ final class AgendaOverlay {
     }
 
     private static void openCalendarEvent(Context context, AgendaEvent event) {
+        if (!openOnLockscreenClick) {
+            return;
+        }
         XposedBridge.log("HyperAgenda: event clicked id=" + event.id);
         launchSuppressedUntilUptime = SystemClock.uptimeMillis() + 1500L;
         setOverlayVisible(false);
