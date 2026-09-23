@@ -77,7 +77,7 @@ public final class AgendaProvider extends ContentProvider {
         ensureCalendarObserver();
         int maxEvents = clamp(prefs.getInt(AgendaContract.KEY_MAX_EVENTS, 1), 1, 3);
         int lookaheadDays = clamp(prefs.getInt(AgendaContract.KEY_LOOKAHEAD_DAYS, 7), 1, 30);
-        boolean showTitles = prefs.getBoolean(AgendaContract.KEY_SHOW_TITLES, true);
+        boolean showLocation = AgendaContract.readShowLocation(prefs);
         long now = System.currentTimeMillis();
         long rangeStart = now - 24L * 60L * 60L * 1000L;
         long rangeEnd = now + lookaheadDays * 24L * 60L * 60L * 1000L;
@@ -114,11 +114,11 @@ public final class AgendaProvider extends ContentProvider {
                     continue;
                 }
                 String rawTitle = cursor.getString(1);
-                String title = showTitles && rawTitle != null && !rawTitle.trim().isEmpty()
+                String title = rawTitle != null && !rawTitle.trim().isEmpty()
                         ? rawTitle.trim()
                         : "日程";
                 String rawLocation = cursor.getString(2);
-                String location = showTitles && rawLocation != null
+                String location = showLocation && rawLocation != null
                         ? rawLocation.trim()
                         : "";
                 CalendarRow row = new CalendarRow(

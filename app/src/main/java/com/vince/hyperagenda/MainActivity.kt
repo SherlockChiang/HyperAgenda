@@ -104,8 +104,8 @@ class MainActivity : ComponentActivity() {
         var enabled by remember(revision) {
             mutableStateOf(preferences.getBoolean(AgendaContract.KEY_ENABLED, true))
         }
-        var showTitles by remember(revision) {
-            mutableStateOf(preferences.getBoolean(AgendaContract.KEY_SHOW_TITLES, true))
+        var showLocation by remember(revision) {
+            mutableStateOf(AgendaContract.readShowLocation(preferences))
         }
         var openOnLockscreenClick by remember(revision) {
             mutableStateOf(
@@ -227,11 +227,11 @@ class MainActivity : ComponentActivity() {
                             },
                         )
                         SwitchPreference(
-                            title = "显示标题与地点",
-                            checked = showTitles,
+                            title = "显示地点",
+                            checked = showLocation,
                             onCheckedChange = {
-                                showTitles = it
-                                putBoolean(AgendaContract.KEY_SHOW_TITLES, it)
+                                showLocation = it
+                                putBoolean(AgendaContract.KEY_SHOW_LOCATION, it)
                             },
                         )
                         SwitchPreference(

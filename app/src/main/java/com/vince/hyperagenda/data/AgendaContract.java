@@ -10,6 +10,7 @@ public final class AgendaContract {
     public static final String PREFS = "agenda_settings";
     public static final String KEY_ENABLED = "enabled";
     public static final String KEY_SHOW_TITLES = "show_titles";
+    public static final String KEY_SHOW_LOCATION = "show_location";
     public static final String KEY_OPEN_ON_LOCKSCREEN_CLICK = "open_on_lockscreen_click";
     public static final String KEY_MAX_EVENTS = "max_events";
     public static final String KEY_LOOKAHEAD_DAYS = "lookahead_days";
@@ -61,6 +62,15 @@ public final class AgendaContract {
                 prefs.getInt(KEY_CLOCK_GAP_DP, DEFAULT_CLOCK_GAP_DP),
                 MIN_CLOCK_GAP_DP,
                 MAX_CLOCK_GAP_DP);
+    }
+
+    public static boolean readShowLocation(SharedPreferences prefs) {
+        if (!prefs.contains(KEY_SHOW_LOCATION) && prefs.contains(KEY_SHOW_TITLES)) {
+            boolean legacyValue = prefs.getBoolean(KEY_SHOW_TITLES, true);
+            prefs.edit().putBoolean(KEY_SHOW_LOCATION, legacyValue).apply();
+            return legacyValue;
+        }
+        return prefs.getBoolean(KEY_SHOW_LOCATION, true);
     }
 
     private static int clamp(int value, int min, int max) {
