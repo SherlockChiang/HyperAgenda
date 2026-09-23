@@ -55,6 +55,7 @@ final class AgendaOverlay {
     private static final String CALENDAR_PACKAGE = "com.android.calendar";
     private static final String EVENT_MIME_TYPE = "vnd.android.cursor.item/event";
     private static final float MIN_VISIBLE_CLOCK_ALPHA = 0.60f;
+    private static final long BOUNCER_SCAN_INTERVAL_MS = 50L;
     private static final String KEYGUARD_INFO_LAYER_VIEW_ID = "keyguard_info_layer";
     private static final String FOREGROUND_CLOCK_CONTAINER_VIEW_ID =
             "miui_keyguard_foreground_clock_container";
@@ -90,6 +91,7 @@ final class AgendaOverlay {
     private static WeakReference<FrameLayout> clockHostRef = new WeakReference<>(null);
     private static WeakReference<View> clockLayoutRef = new WeakReference<>(null);
     private static WeakReference<ViewGroup> layoutRootRef = new WeakReference<>(null);
+    private static WeakReference<ViewGroup> bouncerRootRef = new WeakReference<>(null);
     private static WeakReference<ViewTreeObserver> layoutObserverRef = new WeakReference<>(null);
     private static boolean observersRegistered;
     private static boolean contentAvailable;
@@ -103,6 +105,8 @@ final class AgendaOverlay {
     private static int nativeStyleFingerprint;
     private static long lastNativeStyleSearchUptime;
     private static long lastNativeStyleCheckUptime;
+    private static long lastBouncerScanUptime;
+    private static boolean cachedBouncerShowing;
     private static String lastLoggedNativeStyleSource = "";
     private static int lastLoggedPositionTop = -1;
     private static String lastLoggedPositionSource = "";
@@ -196,6 +200,9 @@ final class AgendaOverlay {
             nativeStyleFingerprint = 0;
             lastNativeStyleSearchUptime = 0L;
             lastNativeStyleCheckUptime = 0L;
+            bouncerRootRef = new WeakReference<>(null);
+            lastBouncerScanUptime = 0L;
+            cachedBouncerShowing = false;
             lastLoggedClockVisualSource = "";
             lastLoggedNativeHost = "";
         }
@@ -1048,6 +1055,11 @@ final class AgendaOverlay {
     }
 
     private static boolean isBouncerShowing(ViewGroup root) {
+        long now = SystemClock.uptimeMillis();
+        if (bouncerRootRef.get() == root
+                && now - lastBouncerScanUptime < BOUNCER_SCAN_INTERVAL_MS) {
+            return cachedBouncerShowing;
+        }
         int[] ids = bouncerViewIds;
         if (ids == null) {
             Context context = root.getContext();
@@ -1058,15 +1070,20 @@ final class AgendaOverlay {
             }
             bouncerViewIds = ids;
         }
+        boolean showing = false;
         for (int id : ids) {
             if (id == 0) {
                 continue;
             }
             if (findVisibleViewById(root, root, id) != null) {
-                return true;
+                showing = true;
+                break;
             }
         }
-        return false;
+        bouncerRootRef = new WeakReference<>(root);
+        lastBouncerScanUptime = now;
+        cachedBouncerShowing = showing;
+        return showing;
     }
 
     private static boolean shouldShowOnKeyguard(Context context) {
