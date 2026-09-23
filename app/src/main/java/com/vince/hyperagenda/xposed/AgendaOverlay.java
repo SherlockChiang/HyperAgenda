@@ -76,6 +76,7 @@ final class AgendaOverlay {
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean REFRESHING = new AtomicBoolean(false);
+    private static final AtomicBoolean REFRESH_PENDING = new AtomicBoolean(false);
     private static final ViewTreeObserver.OnPreDrawListener POSITION_LISTENER = () -> {
         ensureNativeOverlay();
         updatePosition();
@@ -479,7 +480,11 @@ final class AgendaOverlay {
     }
 
     private static void refresh(Context context) {
-        if (context == null || !REFRESHING.compareAndSet(false, true)) {
+        if (context == null) {
+            return;
+        }
+        if (!REFRESHING.compareAndSet(false, true)) {
+            REFRESH_PENDING.set(true);
             return;
         }
         WORKER.execute(() -> {
@@ -505,6 +510,9 @@ final class AgendaOverlay {
                 MAIN.post(() -> setOverlayVisible(false));
             } finally {
                 REFRESHING.set(false);
+                if (REFRESH_PENDING.getAndSet(false)) {
+                    refresh(context);
+                }
             }
         });
     }
