@@ -49,6 +49,16 @@ public final class AgendaContract {
     public static final String METHOD_GET_CONFIG = "get_config";
     public static final String METHOD_REPORT_HOOK = "report_hook";
     public static final String METHOD_LIST_CALENDARS = "list_calendars";
+    public static final String METHOD_GET_STATUS = "get_status";
+
+    public static final String KEY_STATUS_ENABLED = "status_enabled";
+    public static final String KEY_STATUS_PERMISSION = "status_permission";
+    public static final String KEY_STATUS_VISIBLE_CALENDARS = "status_visible_calendars";
+    public static final String KEY_STATUS_SELECTED_CALENDARS = "status_selected_calendars";
+    public static final String KEY_STATUS_SELECTION_CONFIGURED = "status_selection_configured";
+    public static final String KEY_STATUS_MATCHING_EVENTS = "status_matching_events";
+    public static final String KEY_STATUS_NEXT_EVENT_AT = "status_next_event_at";
+    public static final String KEY_STATUS_LOOKAHEAD_DAYS = "status_lookahead_days";
 
     public static final String BUNDLE_CALENDAR_IDS = "calendar_ids";
     public static final String BUNDLE_CALENDAR_NAMES = "calendar_names";

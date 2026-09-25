@@ -78,17 +78,33 @@ public final class AgendaProvider extends ContentProvider {
         }
 
         ensureCalendarObserver();
-        int maxEvents = clamp(prefs.getInt(AgendaContract.KEY_MAX_EVENTS, 1), 1, 3);
-        int lookaheadDays = clamp(prefs.getInt(AgendaContract.KEY_LOOKAHEAD_DAYS, 7), 1, 30);
+        for (CalendarRow row : collect(context, prefs).rows) {
+            output.addRow(row.toObjectArray());
+        }
+        return output;
+    }
+
+    /**
+     * Reads the instances in range once and reports both the rows to display and the counts the
+     * settings screen needs to explain an empty lockscreen.
+     */
+    private AgendaSnapshot collect(Context context, SharedPreferences prefs) {
+        AgendaSnapshot snapshot = new AgendaSnapshot();
+        snapshot.maxEvents = clamp(prefs.getInt(AgendaContract.KEY_MAX_EVENTS, 1), 1, 3);
+        snapshot.lookaheadDays = clamp(prefs.getInt(AgendaContract.KEY_LOOKAHEAD_DAYS, 7), 1, 30);
+        snapshot.selectionConfigured = AgendaContract.hasCalendarSelection(prefs);
+        snapshot.selectedCalendars = AgendaContract.readSelectedCalendarIds(prefs).size();
+        snapshot.visibleCalendars = countVisibleCalendars(context);
+
         String privacyMode = AgendaContract.readPrivacyMode(prefs);
         // SystemUI only ever receives what the current privacy mode allows it to see.
         boolean redacted = redactsDetails(context, privacyMode);
         boolean hideLocation = redacted || AgendaContract.hidesLocation(privacyMode);
         Set<Long> selectedCalendarIds = AgendaContract.readSelectedCalendarIds(prefs);
-        boolean hasCalendarSelection = AgendaContract.hasCalendarSelection(prefs);
+        boolean hasCalendarSelection = snapshot.selectionConfigured;
         long now = System.currentTimeMillis();
         long rangeStart = now - 24L * 60L * 60L * 1000L;
-        long rangeEnd = now + lookaheadDays * 24L * 60L * 60L * 1000L;
+        long rangeEnd = now + snapshot.lookaheadDays * 24L * 60L * 60L * 1000L;
 
         String[] calendarProjection = {
                 CalendarContract.Instances.EVENT_ID,
@@ -107,7 +123,7 @@ public final class AgendaProvider extends ContentProvider {
         try (Cursor cursor = CalendarContract.Instances.query(
                 context.getContentResolver(), calendarProjection, rangeStart, rangeEnd)) {
             if (cursor == null) {
-                return output;
+                return snapshot;
             }
             int idIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.EVENT_ID);
             int titleIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.TITLE);
@@ -129,7 +145,7 @@ public final class AgendaProvider extends ContentProvider {
                     .comparingLong((CalendarRow row) -> row.begin)
                     .thenComparingLong(row -> row.id);
             PriorityQueue<CalendarRow> rows = new PriorityQueue<>(
-                    maxEvents, earliestFirst.reversed());
+                    snapshot.maxEvents, earliestFirst.reversed());
             while (cursor.moveToNext()) {
                 long end = cursor.getLong(endIndex);
                 int status = cursor.getInt(statusIndex);
@@ -141,6 +157,7 @@ public final class AgendaProvider extends ContentProvider {
                         || (hasCalendarSelection && !selectedCalendarIds.contains(calendarId))) {
                     continue;
                 }
+                snapshot.matchingEvents++;
                 String rawTitle = cursor.getString(titleIndex);
                 String title = rawTitle != null && !rawTitle.trim().isEmpty()
                         ? collapseWhitespace(rawTitle)
@@ -159,22 +176,33 @@ public final class AgendaProvider extends ContentProvider {
                         cursor.getInt(allDayIndex),
                         cursor.getInt(colorIndex),
                         redacted ? "" : calendarName);
-                if (rows.size() < maxEvents) {
+                if (rows.size() < snapshot.maxEvents) {
                     rows.add(row);
                 } else if (earliestFirst.compare(row, rows.peek()) < 0) {
                     rows.poll();
                     rows.add(row);
                 }
             }
-            List<CalendarRow> sortedRows = new ArrayList<>(rows);
-            sortedRows.sort(earliestFirst);
-            for (CalendarRow row : sortedRows) {
-                output.addRow(row.toObjectArray());
-            }
+            snapshot.rows.addAll(rows);
+            snapshot.rows.sort(earliestFirst);
         } catch (SecurityException ignored) {
             // Permission may have been revoked while the provider was alive.
         }
-        return output;
+        snapshot.nextEventAt = snapshot.rows.isEmpty() ? 0L : snapshot.rows.get(0).begin;
+        return snapshot;
+    }
+
+    private int countVisibleCalendars(Context context) {
+        try (Cursor cursor = context.getContentResolver().query(
+                CalendarContract.Calendars.CONTENT_URI,
+                new String[]{CalendarContract.Calendars._ID},
+                CalendarContract.Calendars.VISIBLE + "=1",
+                null,
+                null)) {
+            return cursor == null ? 0 : cursor.getCount();
+        } catch (SecurityException ignored) {
+            return 0;
+        }
     }
 
     @Override
@@ -214,7 +242,33 @@ public final class AgendaProvider extends ContentProvider {
         if (AgendaContract.METHOD_LIST_CALENDARS.equals(method)) {
             return listCalendars(context);
         }
+        if (AgendaContract.METHOD_GET_STATUS.equals(method)) {
+            return status(context, prefs);
+        }
         return super.call(method, arg, extras);
+    }
+
+    /**
+     * Explains why the lockscreen may stay empty: paused module, missing permission, no visible
+     * calendar, every group switched off, or simply no event in the lookahead window.
+     */
+    private Bundle status(Context context, SharedPreferences prefs) {
+        Bundle result = new Bundle();
+        boolean enabled = prefs.getBoolean(AgendaContract.KEY_ENABLED, true);
+        boolean granted = context.checkSelfPermission(Manifest.permission.READ_CALENDAR)
+                == PackageManager.PERMISSION_GRANTED;
+        result.putBoolean(AgendaContract.KEY_STATUS_ENABLED, enabled);
+        result.putBoolean(AgendaContract.KEY_STATUS_PERMISSION, granted);
+
+        AgendaSnapshot snapshot = granted ? collect(context, prefs) : new AgendaSnapshot();
+        result.putInt(AgendaContract.KEY_STATUS_VISIBLE_CALENDARS, snapshot.visibleCalendars);
+        result.putInt(AgendaContract.KEY_STATUS_SELECTED_CALENDARS, snapshot.selectedCalendars);
+        result.putBoolean(AgendaContract.KEY_STATUS_SELECTION_CONFIGURED,
+                snapshot.selectionConfigured);
+        result.putInt(AgendaContract.KEY_STATUS_MATCHING_EVENTS, snapshot.matchingEvents);
+        result.putLong(AgendaContract.KEY_STATUS_NEXT_EVENT_AT, snapshot.nextEventAt);
+        result.putInt(AgendaContract.KEY_STATUS_LOOKAHEAD_DAYS, snapshot.lookaheadDays);
+        return result;
     }
 
     private Bundle listCalendars(Context context) {
@@ -376,6 +430,17 @@ public final class AgendaProvider extends ContentProvider {
 
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static final class AgendaSnapshot {
+        final List<CalendarRow> rows = new ArrayList<>();
+        int maxEvents = 1;
+        int lookaheadDays = 7;
+        int matchingEvents;
+        long nextEventAt;
+        int visibleCalendars;
+        int selectedCalendars;
+        boolean selectionConfigured;
     }
 
     private static final class CalendarRow {

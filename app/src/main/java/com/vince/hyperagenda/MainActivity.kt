@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var preferences: SharedPreferences
     private var statusRevision by mutableIntStateOf(0)
     private var calendarOptions by mutableStateOf<List<CalendarOption>>(emptyList())
+    private var agendaStatus by mutableStateOf<AgendaStatus?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -105,6 +106,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         statusRevision++
         loadCalendarOptions()
+        loadStatus()
     }
 
     @Composable
@@ -182,6 +184,7 @@ class MainActivity : ComponentActivity() {
             !enabled -> "注入已连接，锁屏日程当前已暂停"
             else -> "锁屏日程正在运行"
         }
+        val agendaDiagnostic = diagnosticFor(agendaStatus)
         val scrollBehavior = MiuixScrollBehavior()
 
         Scaffold(
@@ -216,6 +219,12 @@ class MainActivity : ComponentActivity() {
                                 InjectionStatusIcon(success = injectionHealthy)
                             },
                         )
+                        agendaDiagnostic?.let { diagnostic ->
+                            BasicComponent(
+                                title = diagnostic.title,
+                                summary = diagnostic.summary,
+                            )
+                        }
                     }
                 }
 
@@ -474,6 +483,81 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun loadStatus() {
+        lifecycleScope.launch {
+            agendaStatus = withContext(Dispatchers.IO) { queryStatus() }
+        }
+    }
+
+    private fun queryStatus(): AgendaStatus? {
+        return try {
+            val result = contentResolver.call(
+                AgendaContract.CONTENT_URI,
+                AgendaContract.METHOD_GET_STATUS,
+                null,
+                null,
+            ) ?: return null
+            AgendaStatus(
+                enabled = result.getBoolean(AgendaContract.KEY_STATUS_ENABLED, false),
+                permission = result.getBoolean(AgendaContract.KEY_STATUS_PERMISSION, false),
+                visibleCalendars = result.getInt(AgendaContract.KEY_STATUS_VISIBLE_CALENDARS, 0),
+                selectedCalendars = result.getInt(AgendaContract.KEY_STATUS_SELECTED_CALENDARS, 0),
+                selectionConfigured = result.getBoolean(
+                    AgendaContract.KEY_STATUS_SELECTION_CONFIGURED,
+                    false,
+                ),
+                matchingEvents = result.getInt(AgendaContract.KEY_STATUS_MATCHING_EVENTS, 0),
+                nextEventAt = result.getLong(AgendaContract.KEY_STATUS_NEXT_EVENT_AT, 0L),
+                lookaheadDays = result.getInt(AgendaContract.KEY_STATUS_LOOKAHEAD_DAYS, 7),
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * States why the lockscreen can be empty, so "没有事件" is never confused with "配置没有生效".
+     */
+    private fun diagnosticFor(status: AgendaStatus?): Diagnostic? {
+        if (status == null) {
+            return null
+        }
+        return when {
+            !status.enabled -> Diagnostic(
+                "锁屏日程已暂停",
+                "打开「显示接下来的日程」后才会出现在锁屏",
+            )
+            !status.permission -> Diagnostic(
+                "日历权限未生效",
+                "请重新授予日历读取权限",
+            )
+            status.visibleCalendars == 0 -> Diagnostic(
+                "系统中没有可见日历",
+                "请在日历应用中启用至少一个日历",
+            )
+            status.selectionConfigured && status.selectedCalendars == 0 -> Diagnostic(
+                "已关闭全部日历分组",
+                "在下方「日历分组」中至少选择一个日历",
+            )
+            status.matchingEvents == 0 -> Diagnostic(
+                "未来 ${status.lookaheadDays} 天内没有日程",
+                "这是正常的空状态，锁屏暂时不会显示日程",
+            )
+            else -> Diagnostic(
+                "未来 ${status.lookaheadDays} 天内有 ${status.matchingEvents} 项日程",
+                "最近一项：${formatStatusTime(status.nextEventAt)}",
+            )
+        }
+    }
+
+    private fun formatStatusTime(millis: Long): String {
+        if (millis <= 0L) {
+            return "未知"
+        }
+        return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+            .format(Date(millis))
+    }
+
     private fun queryCalendarOptions(): List<CalendarOption> {
         return try {
             val result = contentResolver.call(
@@ -529,6 +613,19 @@ class MainActivity : ComponentActivity() {
     )
 
     private data class PrivacyOption(val mode: String, val title: String, val summary: String)
+
+    private data class Diagnostic(val title: String, val summary: String)
+
+    private data class AgendaStatus(
+        val enabled: Boolean,
+        val permission: Boolean,
+        val visibleCalendars: Int,
+        val selectedCalendars: Int,
+        val selectionConfigured: Boolean,
+        val matchingEvents: Int,
+        val nextEventAt: Long,
+        val lookaheadDays: Int,
+    )
 
     private data class CalendarOption(val id: Long, val name: String, val account: String)
 }
