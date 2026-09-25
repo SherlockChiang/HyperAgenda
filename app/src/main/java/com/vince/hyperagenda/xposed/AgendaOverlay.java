@@ -501,6 +501,8 @@ final class AgendaOverlay {
                         && config.getBoolean("calendar_permission", false);
                 boolean openOnClick = config == null
                         || config.getBoolean(AgendaContract.KEY_OPEN_ON_LOCKSCREEN_CLICK, true);
+                boolean redacted = config != null
+                        && config.getBoolean(AgendaContract.KEY_PRIVACY_REDACTED, false);
                 int gap = config == null ? AgendaContract.DEFAULT_CLOCK_GAP_DP
                         : config.getInt(
                                 AgendaContract.KEY_CLOCK_GAP_DP,
@@ -508,7 +510,7 @@ final class AgendaOverlay {
                 reportHook(resolver, context);
 
                 List<AgendaEvent> events = enabled ? queryEvents(resolver) : new ArrayList<>();
-                MAIN.post(() -> render(context, enabled, gap, openOnClick, events));
+                MAIN.post(() -> render(context, enabled, gap, openOnClick, redacted, events));
             } catch (Throwable error) {
                 XposedBridge.log("HyperAgenda: refresh failed: " + error);
                 MAIN.post(() -> setOverlayVisible(false));
@@ -567,7 +569,8 @@ final class AgendaOverlay {
     }
 
     private static void render(Context context, boolean enabled, int gap,
-                               boolean openOnClick, List<AgendaEvent> events) {
+                               boolean openOnClick, boolean redacted,
+                               List<AgendaEvent> events) {
         LinearLayout overlay = overlayRef.get();
         if (overlay == null) {
             return;
@@ -584,12 +587,14 @@ final class AgendaOverlay {
 
         long now = System.currentTimeMillis();
         Locale locale = Locale.getDefault();
+        String redactedTitle = redacted ? redactedTitle(events.size()) : null;
         for (int i = 0; i < events.size(); i++) {
             AgendaEvent event = events.get(i);
             AgendaTimeFormatter.Label label = AgendaTimeFormatter.describe(event, now, locale);
             boolean primary = i == 0;
+            String title = redactedTitle == null ? event.title : redactedTitle;
             overlay.addView(
-                    createRow(context, event, label, primary, openOnLockscreenClick),
+                    createRow(context, event, label, title, primary, openOnLockscreenClick),
                     rowParams(context, primary ? 0 : 6, 0));
         }
 
@@ -1051,8 +1056,8 @@ final class AgendaOverlay {
      * the lockscreen never turns into a list.
      */
     private static LinearLayout createRow(Context context, AgendaEvent event,
-                                          AgendaTimeFormatter.Label label, boolean primary,
-                                          boolean openOnClick) {
+                                          AgendaTimeFormatter.Label label, String title,
+                                          boolean primary, boolean openOnClick) {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -1065,23 +1070,26 @@ final class AgendaOverlay {
             row.setOnClickListener(v -> openCalendarEvent(context, event));
         }
         row.addView(primary
-                        ? createHeadlineColumn(context, event, label)
-                        : createCompactLine(context, event, label),
+                        ? createHeadlineColumn(context, event, label, title)
+                        : createCompactLine(context, event, label, title),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        row.setContentDescription(describeForAccessibility(label, event));
+        row.setContentDescription(describeForAccessibility(label, event, title));
         return row;
     }
 
     private static LinearLayout createHeadlineColumn(Context context, AgendaEvent event,
-                                                     AgendaTimeFormatter.Label label) {
+                                                     AgendaTimeFormatter.Label label,
+                                                     String title) {
         LinearLayout column = new LinearLayout(context);
         column.setOrientation(LinearLayout.VERTICAL);
         column.addView(createText(context, label.headline, TextRole.TIME));
 
-        TextView title = createText(context, event.title, TextRole.TITLE);
-        title.setMaxLines(2);
-        title.setEllipsize(TextUtils.TruncateAt.END);
-        column.addView(title, textLineParams(context, 2));
+        if (!title.isEmpty()) {
+            TextView titleView = createText(context, title, TextRole.TITLE);
+            titleView.setMaxLines(2);
+            titleView.setEllipsize(TextUtils.TruncateAt.END);
+            column.addView(titleView, textLineParams(context, 2));
+        }
 
         String meta = metaText(event, label);
         if (!meta.isEmpty()) {
@@ -1104,7 +1112,7 @@ final class AgendaOverlay {
     }
 
     private static LinearLayout createCompactLine(Context context, AgendaEvent event,
-                                                  AgendaTimeFormatter.Label label) {
+                                                  AgendaTimeFormatter.Label label, String title) {
         LinearLayout line = new LinearLayout(context);
         line.setOrientation(LinearLayout.HORIZONTAL);
         line.setGravity(Gravity.CENTER_VERTICAL);
@@ -1117,12 +1125,19 @@ final class AgendaOverlay {
         timeParams.rightMargin = dp(context, 10);
         line.addView(time, timeParams);
 
-        TextView title = createText(context, event.title, TextRole.COMPACT_TITLE);
-        title.setMaxLines(1);
-        title.setEllipsize(TextUtils.TruncateAt.END);
-        line.addView(title, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        if (!title.isEmpty()) {
+            TextView titleView = createText(context, title, TextRole.COMPACT_TITLE);
+            titleView.setMaxLines(1);
+            titleView.setEllipsize(TextUtils.TruncateAt.END);
+            line.addView(titleView, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        }
         return line;
+    }
+
+    /** Shown instead of the real title when the privacy mode withholds event details. */
+    private static String redactedTitle(int eventCount) {
+        return "有 " + Math.max(1, eventCount) + " 项日程";
     }
 
     private static View createColorDot(Context context, AgendaEvent event) {
@@ -1177,10 +1192,10 @@ final class AgendaOverlay {
     }
 
     private static String describeForAccessibility(AgendaTimeFormatter.Label label,
-                                                   AgendaEvent event) {
+                                                   AgendaEvent event, String title) {
         StringBuilder description = new StringBuilder(label.headline);
-        if (event.title != null && !event.title.isEmpty()) {
-            description.append('，').append(event.title);
+        if (title != null && !title.isEmpty()) {
+            description.append('，').append(title);
         }
         if (event.location != null && !event.location.isEmpty()) {
             description.append("，地点 ").append(event.location);

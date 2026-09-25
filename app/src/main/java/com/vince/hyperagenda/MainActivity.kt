@@ -53,6 +53,7 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -111,8 +112,8 @@ class MainActivity : ComponentActivity() {
         var enabled by remember(revision) {
             mutableStateOf(preferences.getBoolean(AgendaContract.KEY_ENABLED, true))
         }
-        var showLocation by remember(revision) {
-            mutableStateOf(AgendaContract.readShowLocation(preferences))
+        var privacyMode by remember(revision) {
+            mutableStateOf(AgendaContract.readPrivacyMode(preferences))
         }
         var openOnLockscreenClick by remember(revision) {
             mutableStateOf(
@@ -241,14 +242,6 @@ class MainActivity : ComponentActivity() {
                             },
                         )
                         SwitchPreference(
-                            title = "显示地点",
-                            checked = showLocation,
-                            onCheckedChange = {
-                                showLocation = it
-                                putBoolean(AgendaContract.KEY_SHOW_LOCATION, it)
-                            },
-                        )
-                        SwitchPreference(
                             title = "点击日程打开日历",
                             summary = if (openOnLockscreenClick) {
                                 "点击锁屏日程后打开对应事件"
@@ -261,6 +254,28 @@ class MainActivity : ComponentActivity() {
                                 putBoolean(AgendaContract.KEY_OPEN_ON_LOCKSCREEN_CLICK, it)
                             },
                         )
+                    }
+                }
+
+                item(key = "privacy-title") {
+                    SmallTitle(
+                        text = "锁屏隐私",
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+                item(key = "privacy") {
+                    Card(modifier = Modifier.padding(horizontal = 12.dp)) {
+                        privacyOptions.forEach { option ->
+                            RadioButtonPreference(
+                                title = option.title,
+                                summary = option.summary,
+                                selected = privacyMode == option.mode,
+                                onClick = {
+                                    privacyMode = option.mode
+                                    putString(AgendaContract.KEY_PRIVACY_MODE, option.mode)
+                                },
+                            )
+                        }
                     }
                 }
 
@@ -428,6 +443,11 @@ class MainActivity : ComponentActivity() {
         notifyChanged()
     }
 
+    private fun putString(key: String, value: String) {
+        preferences.edit().putString(key, value).apply()
+        notifyChanged()
+    }
+
     private fun putInt(key: String, value: Int) {
         preferences.edit().putInt(key, value).apply()
         notifyChanged()
@@ -484,6 +504,31 @@ class MainActivity : ComponentActivity() {
     private companion object {
         const val HOOK_HEALTH_WINDOW_MS = 5L * 60L * 1000L
     }
+
+    private val privacyOptions = listOf(
+        PrivacyOption(
+            mode = AgendaContract.PRIVACY_FULL,
+            title = "锁屏显示完整信息",
+            summary = "显示标题、地点和日历名称",
+        ),
+        PrivacyOption(
+            mode = AgendaContract.PRIVACY_NO_LOCATION,
+            title = "隐藏地点",
+            summary = "显示标题和日历名称，不显示地点",
+        ),
+        PrivacyOption(
+            mode = AgendaContract.PRIVACY_SUMMARY,
+            title = "只显示「有日程」",
+            summary = "锁屏只提示有日程，不显示标题和地点",
+        ),
+        PrivacyOption(
+            mode = AgendaContract.PRIVACY_AFTER_AUTH,
+            title = "认证后显示详情",
+            summary = "设备需要认证时只提示有日程，无锁屏密码时正常显示",
+        ),
+    )
+
+    private data class PrivacyOption(val mode: String, val title: String, val summary: String)
 
     private data class CalendarOption(val id: Long, val name: String, val account: String)
 }

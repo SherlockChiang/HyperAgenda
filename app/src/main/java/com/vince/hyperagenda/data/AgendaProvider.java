@@ -1,6 +1,7 @@
 package com.vince.hyperagenda.data;
 
 import android.Manifest;
+import android.app.KeyguardManager;
 import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
@@ -79,7 +80,10 @@ public final class AgendaProvider extends ContentProvider {
         ensureCalendarObserver();
         int maxEvents = clamp(prefs.getInt(AgendaContract.KEY_MAX_EVENTS, 1), 1, 3);
         int lookaheadDays = clamp(prefs.getInt(AgendaContract.KEY_LOOKAHEAD_DAYS, 7), 1, 30);
-        boolean showLocation = AgendaContract.readShowLocation(prefs);
+        String privacyMode = AgendaContract.readPrivacyMode(prefs);
+        // SystemUI only ever receives what the current privacy mode allows it to see.
+        boolean redacted = redactsDetails(context, privacyMode);
+        boolean hideLocation = redacted || AgendaContract.hidesLocation(privacyMode);
         Set<Long> selectedCalendarIds = AgendaContract.readSelectedCalendarIds(prefs);
         boolean hasCalendarSelection = AgendaContract.hasCalendarSelection(prefs);
         long now = System.currentTimeMillis();
@@ -142,19 +146,19 @@ public final class AgendaProvider extends ContentProvider {
                         ? rawTitle.trim()
                         : "日程";
                 String rawLocation = cursor.getString(locationIndex);
-                String location = showLocation && rawLocation != null
-                        ? rawLocation.trim()
-                        : "";
+                String location = hideLocation || rawLocation == null
+                        ? ""
+                        : rawLocation.trim();
                 String calendarName = nonBlank(cursor.getString(calendarNameIndex), "");
                 CalendarRow row = new CalendarRow(
                         cursor.getLong(idIndex),
-                        title,
+                        redacted ? "" : title,
                         location,
                         cursor.getLong(beginIndex),
                         end,
                         cursor.getInt(allDayIndex),
                         cursor.getInt(colorIndex),
-                        calendarName);
+                        redacted ? "" : calendarName);
                 if (rows.size() < maxEvents) {
                     rows.add(row);
                 } else if (earliestFirst.compare(row, rows.peek()) < 0) {
@@ -190,6 +194,10 @@ public final class AgendaProvider extends ContentProvider {
                     clamp(prefs.getInt(AgendaContract.KEY_TOP_OFFSET_DP, 210), 120, 520));
             result.putInt(AgendaContract.KEY_CLOCK_GAP_DP,
                     AgendaContract.readClockGapDp(prefs));
+            String privacyMode = AgendaContract.readPrivacyMode(prefs);
+            result.putString(AgendaContract.KEY_PRIVACY_MODE, privacyMode);
+            result.putBoolean(AgendaContract.KEY_PRIVACY_REDACTED,
+                    redactsDetails(context, privacyMode));
             result.putBoolean("calendar_permission",
                     context.checkSelfPermission(Manifest.permission.READ_CALENDAR)
                             == PackageManager.PERMISSION_GRANTED);
@@ -249,6 +257,23 @@ public final class AgendaProvider extends ContentProvider {
 
     private static String nonBlank(String value, String fallback) {
         return value == null || value.trim().isEmpty() ? fallback : value.trim();
+    }
+
+    /**
+     * True when the current privacy mode withholds titles and calendar names. The "认证后显示详情"
+     * mode keeps the details hidden as long as the device actually requires authentication; a device
+     * without a secure lock has nothing to authenticate, so nothing is withheld there.
+     */
+    private static boolean redactsDetails(Context context, String privacyMode) {
+        if (AgendaContract.hidesDetails(privacyMode)) {
+            return true;
+        }
+        if (!AgendaContract.PRIVACY_AFTER_AUTH.equals(privacyMode)) {
+            return false;
+        }
+        KeyguardManager keyguard =
+                (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+        return keyguard != null && keyguard.isDeviceSecure();
     }
 
     @Override

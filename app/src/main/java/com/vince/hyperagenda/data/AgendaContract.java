@@ -14,6 +14,8 @@ public final class AgendaContract {
     public static final String KEY_ENABLED = "enabled";
     public static final String KEY_SHOW_TITLES = "show_titles";
     public static final String KEY_SHOW_LOCATION = "show_location";
+    public static final String KEY_PRIVACY_MODE = "privacy_mode";
+    public static final String KEY_PRIVACY_REDACTED = "privacy_redacted";
     public static final String KEY_SELECTED_CALENDAR_IDS = "selected_calendar_ids";
     public static final String KEY_OPEN_ON_LOCKSCREEN_CLICK = "open_on_lockscreen_click";
     public static final String KEY_MAX_EVENTS = "max_events";
@@ -27,6 +29,22 @@ public final class AgendaContract {
     public static final int DEFAULT_CLOCK_GAP_DP = 24;
     public static final int MIN_CLOCK_GAP_DP = 0;
     public static final int MAX_CLOCK_GAP_DP = 64;
+
+    /** Title, location and calendar name are all shown on the lockscreen. */
+    public static final String PRIVACY_FULL = "full";
+    /** Title and calendar name are shown, the location is withheld. */
+    public static final String PRIVACY_NO_LOCATION = "no_location";
+    /** The lockscreen only states that something is scheduled. */
+    public static final String PRIVACY_SUMMARY = "summary";
+    /** Details are withheld until the device needs no authentication, e.g. no secure lock. */
+    public static final String PRIVACY_AFTER_AUTH = "after_auth";
+
+    public static final String[] PRIVACY_MODES = {
+            PRIVACY_FULL,
+            PRIVACY_NO_LOCATION,
+            PRIVACY_SUMMARY,
+            PRIVACY_AFTER_AUTH
+    };
 
     public static final String METHOD_GET_CONFIG = "get_config";
     public static final String METHOD_REPORT_HOOK = "report_hook";
@@ -81,6 +99,42 @@ public final class AgendaContract {
             return legacyValue;
         }
         return prefs.getBoolean(KEY_SHOW_LOCATION, true);
+    }
+
+    /**
+     * Current privacy mode, migrating the legacy "显示地点" switch into the equivalent mode so an
+     * existing install keeps the visibility it already had.
+     */
+    public static String readPrivacyMode(SharedPreferences prefs) {
+        String stored = prefs.getString(KEY_PRIVACY_MODE, null);
+        if (isKnownPrivacyMode(stored)) {
+            return stored;
+        }
+        String migrated = readShowLocation(prefs) ? PRIVACY_FULL : PRIVACY_NO_LOCATION;
+        prefs.edit().putString(KEY_PRIVACY_MODE, migrated).apply();
+        return migrated;
+    }
+
+    public static boolean isKnownPrivacyMode(String mode) {
+        if (mode == null) {
+            return false;
+        }
+        for (String candidate : PRIVACY_MODES) {
+            if (candidate.equals(mode)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Modes that never expose the location, whatever the keyguard state is. */
+    public static boolean hidesLocation(String mode) {
+        return PRIVACY_NO_LOCATION.equals(mode) || PRIVACY_SUMMARY.equals(mode);
+    }
+
+    /** Modes that never expose the title or the calendar name. */
+    public static boolean hidesDetails(String mode) {
+        return PRIVACY_SUMMARY.equals(mode);
     }
 
     public static Set<Long> readSelectedCalendarIds(SharedPreferences prefs) {
