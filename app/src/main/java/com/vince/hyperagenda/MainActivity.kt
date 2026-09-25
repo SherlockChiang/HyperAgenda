@@ -16,6 +16,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -51,6 +52,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.preference.SliderPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -59,10 +61,14 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.Check
 import top.yukonga.miuix.kmp.icon.basic.Close
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private lateinit var preferences: SharedPreferences
     private var statusRevision by mutableIntStateOf(0)
+    private var calendarOptions by mutableStateOf<List<CalendarOption>>(emptyList())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,6 +103,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         statusRevision++
+        loadCalendarOptions()
     }
 
     @Composable
@@ -123,6 +130,12 @@ class MainActivity : ComponentActivity() {
         var clockGapDp by remember(revision) {
             mutableIntStateOf(readClockGapDp())
         }
+        var selectedCalendarIds by remember(revision, calendarOptions) {
+            mutableStateOf(AgendaContract.readSelectedCalendarIds(preferences))
+        }
+        var calendarSelectionConfigured by remember(revision, calendarOptions) {
+            mutableStateOf(AgendaContract.hasCalendarSelection(preferences))
+        }
 
         val calendarGranted = checkSelfPermission(Manifest.permission.READ_CALENDAR) ==
             PackageManager.PERMISSION_GRANTED
@@ -130,6 +143,7 @@ class MainActivity : ComponentActivity() {
             ActivityResultContracts.RequestPermission(),
         ) {
             notifyChanged()
+            loadCalendarOptions()
             statusRevision++
         }
         val openPermission = {
@@ -303,6 +317,52 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                item(key = "calendar-title") {
+                    SmallTitle(
+                        text = "日历分组",
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+                item(key = "calendars") {
+                    Card(modifier = Modifier.padding(horizontal = 12.dp)) {
+                        when {
+                            !calendarGranted -> BasicComponent(
+                                title = "需要日历权限",
+                                summary = "授权后可以选择要显示的日历分组",
+                            )
+                            calendarOptions.isEmpty() -> BasicComponent(
+                                title = "未读取到日历",
+                                summary = "请确认系统中存在可见日历",
+                            )
+                            else -> calendarOptions.forEach { option ->
+                                val checked = !calendarSelectionConfigured
+                                    || option.id in selectedCalendarIds
+                                CheckboxPreference(
+                                    title = option.name,
+                                    summary = option.account,
+                                    checked = checked,
+                                    onCheckedChange = { enabledForCalendar ->
+                                        val allIds = calendarOptions.map { it.id }.toSet()
+                                        val next = if (!calendarSelectionConfigured) {
+                                            allIds.toMutableSet()
+                                        } else {
+                                            selectedCalendarIds.toMutableSet()
+                                        }
+                                        if (enabledForCalendar) {
+                                            next.add(option.id)
+                                        } else {
+                                            next.remove(option.id)
+                                        }
+                                        selectedCalendarIds = next
+                                        calendarSelectionConfigured = true
+                                        putSelectedCalendarIds(next)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+
                 item(key = "module-title") {
                     SmallTitle(
                         text = "模块",
@@ -373,6 +433,50 @@ class MainActivity : ComponentActivity() {
         notifyChanged()
     }
 
+    private fun putSelectedCalendarIds(ids: Set<Long>) {
+        preferences.edit()
+            .putStringSet(
+                AgendaContract.KEY_SELECTED_CALENDAR_IDS,
+                ids.map { it.toString() }.toSet(),
+            )
+            .apply()
+        notifyChanged()
+    }
+
+    private fun loadCalendarOptions() {
+        if (checkSelfPermission(Manifest.permission.READ_CALENDAR)
+            != PackageManager.PERMISSION_GRANTED) {
+            calendarOptions = emptyList()
+            return
+        }
+        lifecycleScope.launch {
+            calendarOptions = withContext(Dispatchers.IO) { queryCalendarOptions() }
+        }
+    }
+
+    private fun queryCalendarOptions(): List<CalendarOption> {
+        return try {
+            val result = contentResolver.call(
+                AgendaContract.CONTENT_URI,
+                AgendaContract.METHOD_LIST_CALENDARS,
+                null,
+                null,
+            ) ?: return emptyList()
+            val ids = result.getLongArray(AgendaContract.BUNDLE_CALENDAR_IDS) ?: return emptyList()
+            val names = result.getStringArray(AgendaContract.BUNDLE_CALENDAR_NAMES).orEmpty()
+            val accounts = result.getStringArray(AgendaContract.BUNDLE_CALENDAR_ACCOUNTS).orEmpty()
+            ids.mapIndexed { index, id ->
+                CalendarOption(
+                    id = id,
+                    name = names.getOrNull(index) ?: "未命名日历",
+                    account = accounts.getOrNull(index) ?: "本机",
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     private fun notifyChanged() {
         contentResolver.notifyChange(AgendaContract.CONTENT_URI, null)
     }
@@ -380,4 +484,6 @@ class MainActivity : ComponentActivity() {
     private companion object {
         const val HOOK_HEALTH_WINDOW_MS = 5L * 60L * 1000L
     }
+
+    private data class CalendarOption(val id: Long, val name: String, val account: String)
 }

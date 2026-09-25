@@ -3,6 +3,9 @@ package com.vince.hyperagenda.data;
 import android.content.SharedPreferences;
 import android.net.Uri;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public final class AgendaContract {
     public static final String AUTHORITY = "com.vince.hyperagenda.schedule";
     public static final Uri CONTENT_URI = Uri.parse("content://" + AUTHORITY + "/agenda");
@@ -11,6 +14,7 @@ public final class AgendaContract {
     public static final String KEY_ENABLED = "enabled";
     public static final String KEY_SHOW_TITLES = "show_titles";
     public static final String KEY_SHOW_LOCATION = "show_location";
+    public static final String KEY_SELECTED_CALENDAR_IDS = "selected_calendar_ids";
     public static final String KEY_OPEN_ON_LOCKSCREEN_CLICK = "open_on_lockscreen_click";
     public static final String KEY_MAX_EVENTS = "max_events";
     public static final String KEY_LOOKAHEAD_DAYS = "lookahead_days";
@@ -26,6 +30,11 @@ public final class AgendaContract {
 
     public static final String METHOD_GET_CONFIG = "get_config";
     public static final String METHOD_REPORT_HOOK = "report_hook";
+    public static final String METHOD_LIST_CALENDARS = "list_calendars";
+
+    public static final String BUNDLE_CALENDAR_IDS = "calendar_ids";
+    public static final String BUNDLE_CALENDAR_NAMES = "calendar_names";
+    public static final String BUNDLE_CALENDAR_ACCOUNTS = "calendar_accounts";
 
     public static final String COL_EVENT_ID = "event_id";
     public static final String COL_TITLE = "title";
@@ -71,6 +80,26 @@ public final class AgendaContract {
             return legacyValue;
         }
         return prefs.getBoolean(KEY_SHOW_LOCATION, true);
+    }
+
+    public static Set<Long> readSelectedCalendarIds(SharedPreferences prefs) {
+        Set<String> raw = prefs.getStringSet(KEY_SELECTED_CALENDAR_IDS, null);
+        if (raw == null || raw.isEmpty()) {
+            return java.util.Collections.emptySet();
+        }
+        Set<Long> ids = new HashSet<>();
+        for (String value : raw) {
+            try {
+                ids.add(Long.parseLong(value));
+            } catch (NumberFormatException ignored) {
+                // Ignore stale values left by an older build.
+            }
+        }
+        return ids;
+    }
+
+    public static boolean hasCalendarSelection(SharedPreferences prefs) {
+        return prefs.contains(KEY_SELECTED_CALENDAR_IDS);
     }
 
     private static int clamp(int value, int min, int max) {

@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.Set;
 
 public final class AgendaProvider extends ContentProvider {
     private static final Uri[] CALENDAR_OBSERVED_URIS = {
@@ -78,6 +79,8 @@ public final class AgendaProvider extends ContentProvider {
         int maxEvents = clamp(prefs.getInt(AgendaContract.KEY_MAX_EVENTS, 1), 1, 3);
         int lookaheadDays = clamp(prefs.getInt(AgendaContract.KEY_LOOKAHEAD_DAYS, 7), 1, 30);
         boolean showLocation = AgendaContract.readShowLocation(prefs);
+        Set<Long> selectedCalendarIds = AgendaContract.readSelectedCalendarIds(prefs);
+        boolean hasCalendarSelection = AgendaContract.hasCalendarSelection(prefs);
         long now = System.currentTimeMillis();
         long rangeStart = now - 24L * 60L * 60L * 1000L;
         long rangeEnd = now + lookaheadDays * 24L * 60L * 60L * 1000L;
@@ -91,7 +94,8 @@ public final class AgendaProvider extends ContentProvider {
                 CalendarContract.Instances.ALL_DAY,
                 CalendarContract.Instances.DISPLAY_COLOR,
                 CalendarContract.Instances.STATUS,
-                CalendarContract.Instances.SELF_ATTENDEE_STATUS
+                CalendarContract.Instances.SELF_ATTENDEE_STATUS,
+                CalendarContract.Instances.CALENDAR_ID
         };
 
         try (Cursor cursor = CalendarContract.Instances.query(
@@ -108,9 +112,11 @@ public final class AgendaProvider extends ContentProvider {
                 long end = cursor.getLong(4);
                 int status = cursor.getInt(7);
                 int attendeeStatus = cursor.getInt(8);
+                long calendarId = cursor.getLong(9);
                 if (end <= now
                         || status == CalendarContract.Events.STATUS_CANCELED
-                        || attendeeStatus == CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED) {
+                        || attendeeStatus == CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED
+                        || (hasCalendarSelection && !selectedCalendarIds.contains(calendarId))) {
                     continue;
                 }
                 String rawTitle = cursor.getString(1);
@@ -177,7 +183,52 @@ public final class AgendaProvider extends ContentProvider {
                     .apply();
             return Bundle.EMPTY;
         }
+        if (AgendaContract.METHOD_LIST_CALENDARS.equals(method)) {
+            return listCalendars(context);
+        }
         return super.call(method, arg, extras);
+    }
+
+    private Bundle listCalendars(Context context) {
+        Bundle result = new Bundle();
+        List<Long> ids = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        List<String> accounts = new ArrayList<>();
+        try (Cursor cursor = context.getContentResolver().query(
+                CalendarContract.Calendars.CONTENT_URI,
+                new String[]{
+                        CalendarContract.Calendars._ID,
+                        CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+                        CalendarContract.Calendars.ACCOUNT_NAME,
+                        CalendarContract.Calendars.VISIBLE
+                },
+                CalendarContract.Calendars.VISIBLE + "=1",
+                null,
+                CalendarContract.Calendars.CALENDAR_DISPLAY_NAME + " COLLATE NOCASE ASC")) {
+            if (cursor != null) {
+                while (cursor.moveToNext()) {
+                    ids.add(cursor.getLong(0));
+                    names.add(nonBlank(cursor.getString(1), "未命名日历"));
+                    accounts.add(nonBlank(cursor.getString(2), "本机"));
+                }
+            }
+        } catch (SecurityException ignored) {
+            // Permission may have been revoked while the provider was alive.
+        }
+        long[] idArray = new long[ids.size()];
+        String[] nameArray = names.toArray(new String[0]);
+        String[] accountArray = accounts.toArray(new String[0]);
+        for (int i = 0; i < ids.size(); i++) {
+            idArray[i] = ids.get(i);
+        }
+        result.putLongArray(AgendaContract.BUNDLE_CALENDAR_IDS, idArray);
+        result.putStringArray(AgendaContract.BUNDLE_CALENDAR_NAMES, nameArray);
+        result.putStringArray(AgendaContract.BUNDLE_CALENDAR_ACCOUNTS, accountArray);
+        return result;
+    }
+
+    private static String nonBlank(String value, String fallback) {
+        return value == null || value.trim().isEmpty() ? fallback : value.trim();
     }
 
     @Override
