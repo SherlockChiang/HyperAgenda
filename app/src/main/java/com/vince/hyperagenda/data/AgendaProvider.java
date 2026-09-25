@@ -143,13 +143,13 @@ public final class AgendaProvider extends ContentProvider {
                 }
                 String rawTitle = cursor.getString(titleIndex);
                 String title = rawTitle != null && !rawTitle.trim().isEmpty()
-                        ? rawTitle.trim()
+                        ? collapseWhitespace(rawTitle)
                         : "日程";
                 String rawLocation = cursor.getString(locationIndex);
                 String location = hideLocation || rawLocation == null
                         ? ""
-                        : rawLocation.trim();
-                String calendarName = nonBlank(cursor.getString(calendarNameIndex), "");
+                        : collapseWhitespace(rawLocation);
+                String calendarName = collapseWhitespace(cursor.getString(calendarNameIndex));
                 CalendarRow row = new CalendarRow(
                         cursor.getLong(idIndex),
                         redacted ? "" : title,
@@ -257,6 +257,17 @@ public final class AgendaProvider extends ContentProvider {
 
     private static String nonBlank(String value, String fallback) {
         return value == null || value.trim().isEmpty() ? fallback : value.trim();
+    }
+
+    /**
+     * Calendar text can contain newlines and runs of spaces. Collapsing them keeps the lockscreen
+     * rows on the single line each of them is measured for.
+     */
+    private static String collapseWhitespace(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().replaceAll("\\s+", " ");
     }
 
     /**

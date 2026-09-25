@@ -21,6 +21,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.text.Layout;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -330,7 +331,7 @@ final class AgendaOverlay {
                 currentOverlay.setTag(TAG);
                 currentOverlay.setOrientation(LinearLayout.VERTICAL);
                 currentOverlay.setGravity(Gravity.CENTER_VERTICAL);
-                currentOverlay.setPadding(
+                currentOverlay.setPaddingRelative(
                         dp(context, 4), dp(context, 4), dp(context, 4), dp(context, 4));
                 currentOverlay.setImportantForAccessibility(
                         View.IMPORTANT_FOR_ACCESSIBILITY_YES);
@@ -342,8 +343,8 @@ final class AgendaOverlay {
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-                params.leftMargin = dp(context, 20);
-                params.rightMargin = dp(context, 20);
+                params.setMarginStart(dp(context, 20));
+                params.setMarginEnd(dp(context, 20));
                 params.topMargin = 0;
                 binding.injectionHost.addView(currentOverlay, params);
             }
@@ -1065,7 +1066,7 @@ final class AgendaOverlay {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(context, 12), dp(context, primary ? 10 : 8),
+        row.setPaddingRelative(dp(context, 12), dp(context, primary ? 10 : 8),
                 dp(context, 12), dp(context, primary ? 10 : 8));
         row.setClickable(openOnClick);
         row.setFocusable(openOnClick);
@@ -1136,7 +1137,7 @@ final class AgendaOverlay {
         time.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        timeParams.rightMargin = dp(context, 10);
+        timeParams.setMarginEnd(dp(context, 10));
         line.addView(time, timeParams);
 
         if (!title.isEmpty()) {
@@ -1166,7 +1167,7 @@ final class AgendaOverlay {
     private static LinearLayout.LayoutParams dotParams(Context context) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 dp(context, 8), dp(context, 8));
-        params.rightMargin = dp(context, 6);
+        params.setMarginEnd(dp(context, 6));
         return params;
     }
 
@@ -1279,6 +1280,12 @@ final class AgendaOverlay {
         TextView view = new TextView(context);
         view.setText(value);
         view.setTag(role);
+        // Resolve alignment against the layout direction so RTL text keeps its start edge, and let
+        // the platform break long CJK/Latin titles instead of overlapping the neighbouring views.
+        view.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        view.setHorizontallyScrolling(false);
+        view.setBreakStrategy(Layout.BREAK_STRATEGY_HIGH_QUALITY);
+        view.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL);
         NativeTextStyle style = cachedNativeTextStyle;
         (style == null ? NativeTextStyle.fallback(context) : style).apply(view, role);
         return view;
