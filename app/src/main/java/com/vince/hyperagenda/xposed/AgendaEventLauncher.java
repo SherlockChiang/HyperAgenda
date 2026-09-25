@@ -16,7 +16,8 @@ final class AgendaEventLauncher {
     private AgendaEventLauncher() {
     }
 
-    static void open(Context context, AgendaEvent event) {
+    /** Returns true when the event was handed to the system, so the caller can react to failure. */
+    static boolean open(Context context, AgendaEvent event) {
         try {
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(
@@ -41,25 +42,27 @@ final class AgendaEventLauncher {
                         "startPendingIntentDismissingKeyguard", pendingIntent)) {
                     XposedBridge.log("HyperAgenda: event queued via "
                             + "startPendingIntentDismissingKeyguard id=" + event.id);
-                    return;
+                    return true;
                 }
                 if (callActivityStarter(activityStarter,
                         "postStartActivityDismissingKeyguard", pendingIntent)) {
                     XposedBridge.log("HyperAgenda: event queued via "
                             + "postStartActivityDismissingKeyguard id=" + event.id);
-                    return;
+                    return true;
                 }
                 if (callActivityStarter(activityStarter, "startActivity", intent, true)) {
                     XposedBridge.log("HyperAgenda: event queued via startActivity fallback id="
                             + event.id);
-                    return;
+                    return true;
                 }
             }
 
             pendingIntent.send();
             XposedBridge.log("HyperAgenda: event sent directly behind keyguard id=" + event.id);
+            return true;
         } catch (Throwable error) {
             XposedBridge.log("HyperAgenda: cannot open calendar event " + event.id + ": " + error);
+            return false;
         }
     }
 

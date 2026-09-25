@@ -49,6 +49,10 @@ import de.robv.android.xposed.XposedHelpers;
 final class AgendaOverlay {
     private static final String TAG = "hyperagenda_lock_screen_overlay";
     private static final float MIN_VISIBLE_CLOCK_ALPHA = 0.60f;
+    private static final float PRESSED_ALPHA = 0.62f;
+    private static final float PRESSED_SCALE = 0.98f;
+    private static final long PRESS_DOWN_MS = 90L;
+    private static final long PRESS_UP_MS = 140L;
     private static final long BOUNCER_SCAN_INTERVAL_MS = 50L;
     private static final String KEYGUARD_INFO_LAYER_VIEW_ID = "keyguard_info_layer";
     private static final String FOREGROUND_CLOCK_CONTAINER_VIEW_ID =
@@ -1067,7 +1071,17 @@ final class AgendaOverlay {
         row.setFocusable(openOnClick);
         row.setBackground(openOnClick ? createRippleBackground(context) : null);
         if (openOnClick) {
-            row.setOnClickListener(v -> openCalendarEvent(context, event));
+            row.setOnClickListener(v -> openCalendarEvent(context, event, v));
+            row.setOnTouchListener((v, event1) -> {
+                int action = event1.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN) {
+                    setRowPressed(v, true);
+                } else if (action == MotionEvent.ACTION_UP
+                        || action == MotionEvent.ACTION_CANCEL) {
+                    setRowPressed(v, false);
+                }
+                return false;
+            });
         }
         row.addView(primary
                         ? createHeadlineColumn(context, event, label, title)
@@ -1209,14 +1223,45 @@ final class AgendaOverlay {
         return description.toString();
     }
 
-    private static void openCalendarEvent(Context context, AgendaEvent event) {
+    private static void openCalendarEvent(Context context, AgendaEvent event, View row) {
         if (!openOnLockscreenClick) {
             return;
         }
         XposedBridge.log("HyperAgenda: event clicked id=" + event.id);
-        launchSuppressedUntilUptime = SystemClock.uptimeMillis() + 1500L;
-        setOverlayVisible(false);
-        AgendaEventLauncher.open(context, event);
+        if (AgendaEventLauncher.open(context, event)) {
+            launchSuppressedUntilUptime = SystemClock.uptimeMillis() + 1500L;
+            setOverlayVisible(false);
+            return;
+        }
+        // The calendar could not be opened: keep the agenda on screen instead of blanking it.
+        launchSuppressedUntilUptime = 0L;
+        restoreRowVisual(row);
+        setOverlayVisible(true);
+        XposedBridge.log("HyperAgenda: calendar launch failed, agenda stays visible");
+    }
+
+    /** Touch feedback: the row dips while pressed so a tap is visibly registered. */
+    private static void setRowPressed(View row, boolean pressed) {
+        if (row == null) {
+            return;
+        }
+        row.animate().cancel();
+        row.animate()
+                .alpha(pressed ? PRESSED_ALPHA : 1f)
+                .scaleX(pressed ? PRESSED_SCALE : 1f)
+                .scaleY(pressed ? PRESSED_SCALE : 1f)
+                .setDuration(pressed ? PRESS_DOWN_MS : PRESS_UP_MS)
+                .start();
+    }
+
+    private static void restoreRowVisual(View row) {
+        if (row == null) {
+            return;
+        }
+        row.animate().cancel();
+        row.setAlpha(1f);
+        row.setScaleX(1f);
+        row.setScaleY(1f);
     }
 
     private static RippleDrawable createRippleBackground(Context context) {
