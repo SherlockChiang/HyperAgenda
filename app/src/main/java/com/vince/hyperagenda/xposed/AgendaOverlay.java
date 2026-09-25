@@ -54,6 +54,10 @@ final class AgendaOverlay {
     private static final float PRESSED_SCALE = 0.98f;
     private static final long PRESS_DOWN_MS = 90L;
     private static final long PRESS_UP_MS = 140L;
+    private static final long FADE_IN_MS = 220L;
+    private static final long FADE_OUT_MS = 160L;
+    private static final float FADE_FRAME_MS = 16f;
+    private static final float FADE_MAX_FRAME_MS = 80f;
     private static final long BOUNCER_SCAN_INTERVAL_MS = 50L;
     private static final String KEYGUARD_INFO_LAYER_VIEW_ID = "keyguard_info_layer";
     private static final String FOREGROUND_CLOCK_CONTAINER_VIEW_ID =
@@ -114,6 +118,8 @@ final class AgendaOverlay {
     private static String lastLoggedNativeHost = "";
     private static long launchSuppressedUntilUptime;
     private static String lastLoggedClockVisualSource = "";
+    private static float fadeLevel;
+    private static long lastFadeFrameUptime;
 
     private AgendaOverlay() {
     }
@@ -153,7 +159,7 @@ final class AgendaOverlay {
         }
         updatePosition();
         LinearLayout overlay = overlayRef.get();
-        if (overlay == null || !isEffectivelyVisible(overlay, root)) {
+        if (overlay == null || !isFullyFadedIn() || !isEffectivelyVisible(overlay, root)) {
             return null;
         }
         Rect bounds = new Rect();
@@ -173,7 +179,8 @@ final class AgendaOverlay {
         }
         updatePosition();
         LinearLayout overlay = overlayRef.get();
-        return openOnLockscreenClick && overlay != null && target.getParent() == overlay
+        return openOnLockscreenClick && overlay != null && isFullyFadedIn()
+                && target.getParent() == overlay
                 && overlay.getParent() == injectionHostRef.get()
                 && target.isEnabled() && target.isClickable()
                 && isEffectivelyVisible(target, root);
@@ -185,6 +192,7 @@ final class AgendaOverlay {
             LinearLayout previousOverlay = overlayRef.get();
             if (previousOverlay != null) {
                 previousOverlay.animate().cancel();
+                previousOverlay.setAlpha(0f);
                 previousOverlay.setVisibility(View.GONE);
                 if (previousOverlay.getParent() instanceof ViewGroup) {
                     ((ViewGroup) previousOverlay.getParent()).removeView(previousOverlay);
@@ -204,6 +212,8 @@ final class AgendaOverlay {
             cachedBouncerShowing = false;
             lastLoggedClockVisualSource = "";
             lastLoggedNativeHost = "";
+            fadeLevel = 0f;
+            lastFadeFrameUptime = 0L;
         }
         if (previousRoot != root) {
             XposedBridge.log("HyperAgenda: active keyguard root=" + root.getClass().getName());
@@ -586,7 +596,8 @@ final class AgendaOverlay {
         overlay.removeAllViews();
 
         if (!contentAvailable || !shouldShowOnKeyguard(context)) {
-            overlay.setVisibility(View.GONE);
+            // Nothing to fade: the rows are gone, so drop the overlay on this frame.
+            hideOverlayImmediately();
             return;
         }
 
@@ -677,19 +688,25 @@ final class AgendaOverlay {
                     + " clockSource=native-clock-hierarchy"
                     + " clockAlpha=" + clockAlpha);
         }
-        int targetVisibility = shouldBeVisible ? View.VISIBLE : View.GONE;
-        if (overlay.getVisibility() != targetVisibility) {
-            if (!shouldBeVisible) {
+        float fade = advanceFade(shouldBeVisible, SystemClock.uptimeMillis());
+        if (!shouldBeVisible && fade <= 0f) {
+            if (overlay.getVisibility() != View.GONE) {
                 overlay.animate().cancel();
-                overlay.setAlpha(1f);
+                overlay.setAlpha(0f);
+                overlay.setVisibility(View.GONE);
             }
-            overlay.setVisibility(targetVisibility);
-        }
-        if (!shouldBeVisible) {
             return;
         }
-        overlay.setAlpha(normalizeClockAlpha(clockAlpha));
+        if (overlay.getVisibility() != View.VISIBLE) {
+            overlay.setVisibility(View.VISIBLE);
+        }
+        // The clock fade and our own fade are multiplied so the agenda never pops in or out.
+        overlay.setAlpha(fade * normalizeClockAlpha(clockAlpha));
 
+        if (nativeClockBottom == null) {
+            // The clock is already gone while the agenda fades out: keep the last position.
+            return;
+        }
         int top = nativeClockBottom + dp(context, clockGapDp);
         int minTop = dp(context, 120);
         if (top < minTop) {
@@ -809,6 +826,31 @@ final class AgendaOverlay {
         float normalized = (alpha - MIN_VISIBLE_CLOCK_ALPHA)
                 / (1f - MIN_VISIBLE_CLOCK_ALPHA);
         return Math.max(0f, Math.min(1f, normalized));
+    }
+
+    /**
+     * Steps the agenda fade once per frame. The pre-draw listener already runs for every frame, so
+     * the fade follows the same cadence as the native clock animation instead of a separate
+     * animator that can fight with the per-frame clock alpha.
+     */
+    private static float advanceFade(boolean shouldBeVisible, long now) {
+        long previous = lastFadeFrameUptime;
+        lastFadeFrameUptime = now;
+        float elapsed = previous == 0L
+                ? FADE_FRAME_MS
+                : Math.min(FADE_MAX_FRAME_MS, Math.max(0f, now - previous));
+        if (shouldBeVisible) {
+            if (fadeLevel < 1f) {
+                fadeLevel = Math.min(1f, fadeLevel + elapsed / FADE_IN_MS);
+            }
+        } else if (fadeLevel > 0f) {
+            fadeLevel = Math.max(0f, fadeLevel - elapsed / FADE_OUT_MS);
+        }
+        return fadeLevel;
+    }
+
+    private static boolean isFullyFadedIn() {
+        return fadeLevel >= 0.99f;
     }
 
     private static View findVisibleViewById(View searchRoot, ViewGroup root, int id) {
@@ -1050,9 +1092,28 @@ final class AgendaOverlay {
 
     private static void setOverlayVisible(boolean visible) {
         LinearLayout overlay = overlayRef.get();
-        if (overlay != null) {
-            overlay.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (overlay == null) {
+            return;
         }
+        if (visible) {
+            // The next pre-draw frame fades the agenda back in.
+            overlay.setVisibility(View.VISIBLE);
+            return;
+        }
+        hideOverlayImmediately();
+    }
+
+    /** Instant hide for screen off, authentication and after a row launched the calendar. */
+    private static void hideOverlayImmediately() {
+        fadeLevel = 0f;
+        lastFadeFrameUptime = 0L;
+        LinearLayout overlay = overlayRef.get();
+        if (overlay == null) {
+            return;
+        }
+        overlay.animate().cancel();
+        overlay.setAlpha(0f);
+        overlay.setVisibility(View.GONE);
     }
 
     /**
