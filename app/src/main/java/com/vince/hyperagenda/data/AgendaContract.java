@@ -70,8 +70,6 @@ public final class AgendaContract {
     public static final String COL_BEGIN = "begin";
     public static final String COL_END = "end";
     public static final String COL_ALL_DAY = "all_day";
-    public static final String COL_COLOR = "color";
-    public static final String COL_CALENDAR_NAME = "calendar_name";
 
     public static int readClockGapDp(SharedPreferences prefs) {
         if (!prefs.getBoolean(KEY_CLOCK_GAP_V2_MIGRATED, false)) {

@@ -40,9 +40,7 @@ public final class AgendaProvider extends ContentProvider {
             AgendaContract.COL_LOCATION,
             AgendaContract.COL_BEGIN,
             AgendaContract.COL_END,
-            AgendaContract.COL_ALL_DAY,
-            AgendaContract.COL_COLOR,
-            AgendaContract.COL_CALENDAR_NAME
+            AgendaContract.COL_ALL_DAY
     };
 
     private boolean observerRegistered;
@@ -115,11 +113,9 @@ public final class AgendaProvider extends ContentProvider {
                 CalendarContract.Instances.BEGIN,
                 CalendarContract.Instances.END,
                 CalendarContract.Instances.ALL_DAY,
-                CalendarContract.Instances.DISPLAY_COLOR,
                 CalendarContract.Instances.STATUS,
                 CalendarContract.Instances.SELF_ATTENDEE_STATUS,
-                CalendarContract.Instances.CALENDAR_ID,
-                CalendarContract.Instances.CALENDAR_DISPLAY_NAME
+                CalendarContract.Instances.CALENDAR_ID
         };
 
         try (Cursor cursor = CalendarContract.Instances.query(
@@ -134,15 +130,11 @@ public final class AgendaProvider extends ContentProvider {
             int beginIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.BEGIN);
             int endIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.END);
             int allDayIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.ALL_DAY);
-            int colorIndex =
-                    cursor.getColumnIndexOrThrow(CalendarContract.Instances.DISPLAY_COLOR);
             int statusIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.STATUS);
             int attendeeIndex = cursor.getColumnIndexOrThrow(
                     CalendarContract.Instances.SELF_ATTENDEE_STATUS);
             int calendarIdIndex =
                     cursor.getColumnIndexOrThrow(CalendarContract.Instances.CALENDAR_ID);
-            int calendarNameIndex =
-                    cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_DISPLAY_NAME);
             Comparator<CalendarRow> earliestFirst = Comparator
                     .comparingLong((CalendarRow row) -> row.begin)
                     .thenComparingLong(row -> row.id);
@@ -168,19 +160,13 @@ public final class AgendaProvider extends ContentProvider {
                 String location = hideLocation || rawLocation == null
                         ? ""
                         : collapseWhitespace(rawLocation);
-                // Older calendar providers may not expose the calendar name; the label is optional.
-                String calendarName = calendarNameIndex < 0
-                        ? ""
-                        : collapseWhitespace(cursor.getString(calendarNameIndex));
                 CalendarRow row = new CalendarRow(
                         cursor.getLong(idIndex),
                         redacted ? "" : title,
                         location,
                         cursor.getLong(beginIndex),
                         end,
-                        cursor.getInt(allDayIndex),
-                        cursor.getInt(colorIndex),
-                        redacted ? "" : calendarName);
+                        cursor.getInt(allDayIndex));
                 if (rows.size() < snapshot.maxEvents) {
                     rows.add(row);
                 } else if (earliestFirst.compare(row, rows.peek()) < 0) {
@@ -457,25 +443,18 @@ public final class AgendaProvider extends ContentProvider {
         final long begin;
         final long end;
         final int allDay;
-        final int color;
-        final String calendarName;
 
-        CalendarRow(long id, String title, String location, long begin, long end,
-                    int allDay, int color, String calendarName) {
+        CalendarRow(long id, String title, String location, long begin, long end, int allDay) {
             this.id = id;
             this.title = title;
             this.location = location;
             this.begin = begin;
             this.end = end;
             this.allDay = allDay;
-            this.color = color;
-            this.calendarName = calendarName;
         }
 
         Object[] toObjectArray() {
-            return new Object[]{
-                    id, title, location, begin, end, allDay, color, calendarName
-            };
+            return new Object[]{id, title, location, begin, end, allDay};
         }
     }
 

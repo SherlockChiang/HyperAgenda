@@ -551,9 +551,6 @@ final class AgendaOverlay {
             int beginIndex = cursor.getColumnIndexOrThrow(AgendaContract.COL_BEGIN);
             int endIndex = cursor.getColumnIndexOrThrow(AgendaContract.COL_END);
             int allDayIndex = cursor.getColumnIndexOrThrow(AgendaContract.COL_ALL_DAY);
-            int colorIndex = cursor.getColumnIndexOrThrow(AgendaContract.COL_COLOR);
-            int calendarNameIndex =
-                    cursor.getColumnIndexOrThrow(AgendaContract.COL_CALENDAR_NAME);
             while (cursor.moveToNext()) {
                 events.add(new AgendaEvent(
                         cursor.getLong(idIndex),
@@ -561,9 +558,7 @@ final class AgendaOverlay {
                         cursor.getString(locationIndex),
                         cursor.getLong(beginIndex),
                         cursor.getLong(endIndex),
-                        cursor.getInt(allDayIndex) != 0,
-                        cursor.getInt(colorIndex),
-                        cursor.getString(calendarNameIndex)));
+                        cursor.getInt(allDayIndex) != 0));
             }
         }
         return events;
@@ -1235,23 +1230,16 @@ final class AgendaOverlay {
         return params;
     }
 
-    /** End of the second row: location and calendar, plus the end time of a cross-day event. */
+    /** End of the second row: the location, plus the end time of an event that spans days. */
     private static String trailingText(AgendaEvent event, AgendaTimeFormatter.Label label) {
         StringBuilder trailing = new StringBuilder();
         if (event.location != null && !event.location.isEmpty()) {
             trailing.append(event.location);
         }
-        if (hasCalendarName(event)) {
-            appendTrailing(trailing, event.calendarName);
-        }
         if (label.endNote != null) {
             appendTrailing(trailing, label.endNote);
         }
         return trailing.toString();
-    }
-
-    private static boolean hasCalendarName(AgendaEvent event) {
-        return event.calendarName != null && !event.calendarName.isEmpty();
     }
 
     private static void appendTrailing(StringBuilder trailing, String value) {
@@ -1276,9 +1264,6 @@ final class AgendaOverlay {
         description.append(label.headline);
         if (event.location != null && !event.location.isEmpty()) {
             description.append("，地点 ").append(event.location);
-        }
-        if (hasCalendarName(event)) {
-            description.append("，日历 ").append(event.calendarName);
         }
         if (label.endNote != null) {
             description.append('，').append(label.endNote);
