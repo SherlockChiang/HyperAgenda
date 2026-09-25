@@ -534,6 +534,8 @@ final class AgendaOverlay {
             int endIndex = cursor.getColumnIndexOrThrow(AgendaContract.COL_END);
             int allDayIndex = cursor.getColumnIndexOrThrow(AgendaContract.COL_ALL_DAY);
             int colorIndex = cursor.getColumnIndexOrThrow(AgendaContract.COL_COLOR);
+            int calendarNameIndex =
+                    cursor.getColumnIndexOrThrow(AgendaContract.COL_CALENDAR_NAME);
             while (cursor.moveToNext()) {
                 events.add(new AgendaEvent(
                         cursor.getLong(idIndex),
@@ -542,7 +544,8 @@ final class AgendaOverlay {
                         cursor.getLong(beginIndex),
                         cursor.getLong(endIndex),
                         cursor.getInt(allDayIndex) != 0,
-                        cursor.getInt(colorIndex)));
+                        cursor.getInt(colorIndex),
+                        cursor.getString(calendarNameIndex)));
             }
         }
         return events;
@@ -1085,7 +1088,10 @@ final class AgendaOverlay {
             LinearLayout metaLine = new LinearLayout(context);
             metaLine.setOrientation(LinearLayout.HORIZONTAL);
             metaLine.setGravity(Gravity.CENTER_VERTICAL);
-            metaLine.addView(createColorDot(context, event), dotParams(context));
+            if (hasCalendarName(event)) {
+                // The dot carries the calendar colour so identical titles stay distinguishable.
+                metaLine.addView(createColorDot(context, event), dotParams(context));
+            }
 
             TextView metaView = createText(context, meta, TextRole.META);
             metaView.setMaxLines(1);
@@ -1147,10 +1153,17 @@ final class AgendaOverlay {
         if (event.location != null && !event.location.isEmpty()) {
             meta.append(event.location);
         }
+        if (hasCalendarName(event)) {
+            appendMeta(meta, event.calendarName);
+        }
         if (label.endNote != null) {
             appendMeta(meta, label.endNote);
         }
         return meta.toString();
+    }
+
+    private static boolean hasCalendarName(AgendaEvent event) {
+        return event.calendarName != null && !event.calendarName.isEmpty();
     }
 
     private static void appendMeta(StringBuilder meta, String value) {
@@ -1171,6 +1184,9 @@ final class AgendaOverlay {
         }
         if (event.location != null && !event.location.isEmpty()) {
             description.append("，地点 ").append(event.location);
+        }
+        if (hasCalendarName(event)) {
+            description.append("，日历 ").append(event.calendarName);
         }
         if (label.endNote != null) {
             description.append('，').append(label.endNote);

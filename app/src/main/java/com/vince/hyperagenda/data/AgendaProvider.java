@@ -38,7 +38,8 @@ public final class AgendaProvider extends ContentProvider {
             AgendaContract.COL_BEGIN,
             AgendaContract.COL_END,
             AgendaContract.COL_ALL_DAY,
-            AgendaContract.COL_COLOR
+            AgendaContract.COL_COLOR,
+            AgendaContract.COL_CALENDAR_NAME
     };
 
     private boolean observerRegistered;
@@ -95,7 +96,8 @@ public final class AgendaProvider extends ContentProvider {
                 CalendarContract.Instances.DISPLAY_COLOR,
                 CalendarContract.Instances.STATUS,
                 CalendarContract.Instances.SELF_ATTENDEE_STATUS,
-                CalendarContract.Instances.CALENDAR_ID
+                CalendarContract.Instances.CALENDAR_ID,
+                CalendarContract.Instances.CALENDAR_DISPLAY_NAME
         };
 
         try (Cursor cursor = CalendarContract.Instances.query(
@@ -103,38 +105,56 @@ public final class AgendaProvider extends ContentProvider {
             if (cursor == null) {
                 return output;
             }
+            int idIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.EVENT_ID);
+            int titleIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.TITLE);
+            int locationIndex =
+                    cursor.getColumnIndexOrThrow(CalendarContract.Instances.EVENT_LOCATION);
+            int beginIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.BEGIN);
+            int endIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.END);
+            int allDayIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.ALL_DAY);
+            int colorIndex =
+                    cursor.getColumnIndexOrThrow(CalendarContract.Instances.DISPLAY_COLOR);
+            int statusIndex = cursor.getColumnIndexOrThrow(CalendarContract.Instances.STATUS);
+            int attendeeIndex = cursor.getColumnIndexOrThrow(
+                    CalendarContract.Instances.SELF_ATTENDEE_STATUS);
+            int calendarIdIndex =
+                    cursor.getColumnIndexOrThrow(CalendarContract.Instances.CALENDAR_ID);
+            int calendarNameIndex = cursor.getColumnIndexOrThrow(
+                    CalendarContract.Instances.CALENDAR_DISPLAY_NAME);
             Comparator<CalendarRow> earliestFirst = Comparator
                     .comparingLong((CalendarRow row) -> row.begin)
                     .thenComparingLong(row -> row.id);
             PriorityQueue<CalendarRow> rows = new PriorityQueue<>(
                     maxEvents, earliestFirst.reversed());
             while (cursor.moveToNext()) {
-                long end = cursor.getLong(4);
-                int status = cursor.getInt(7);
-                int attendeeStatus = cursor.getInt(8);
-                long calendarId = cursor.getLong(9);
+                long end = cursor.getLong(endIndex);
+                int status = cursor.getInt(statusIndex);
+                int attendeeStatus = cursor.getInt(attendeeIndex);
+                long calendarId = cursor.getLong(calendarIdIndex);
                 if (end <= now
                         || status == CalendarContract.Events.STATUS_CANCELED
                         || attendeeStatus == CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED
                         || (hasCalendarSelection && !selectedCalendarIds.contains(calendarId))) {
                     continue;
                 }
-                String rawTitle = cursor.getString(1);
+                String rawTitle = cursor.getString(titleIndex);
                 String title = rawTitle != null && !rawTitle.trim().isEmpty()
                         ? rawTitle.trim()
                         : "日程";
-                String rawLocation = cursor.getString(2);
+                String rawLocation = cursor.getString(locationIndex);
                 String location = showLocation && rawLocation != null
                         ? rawLocation.trim()
                         : "";
+                String calendarName = nonBlank(cursor.getString(calendarNameIndex), "");
                 CalendarRow row = new CalendarRow(
-                        cursor.getLong(0),
+                        cursor.getLong(idIndex),
                         title,
                         location,
-                        cursor.getLong(3),
+                        cursor.getLong(beginIndex),
                         end,
-                        cursor.getInt(5),
-                        cursor.getInt(6));
+                        cursor.getInt(allDayIndex),
+                        cursor.getInt(colorIndex),
+                        calendarName);
                 if (rows.size() < maxEvents) {
                     rows.add(row);
                 } else if (earliestFirst.compare(row, rows.peek()) < 0) {
@@ -330,9 +350,10 @@ public final class AgendaProvider extends ContentProvider {
         final long end;
         final int allDay;
         final int color;
+        final String calendarName;
 
         CalendarRow(long id, String title, String location, long begin, long end,
-                    int allDay, int color) {
+                    int allDay, int color, String calendarName) {
             this.id = id;
             this.title = title;
             this.location = location;
@@ -340,10 +361,13 @@ public final class AgendaProvider extends ContentProvider {
             this.end = end;
             this.allDay = allDay;
             this.color = color;
+            this.calendarName = calendarName;
         }
 
         Object[] toObjectArray() {
-            return new Object[]{id, title, location, begin, end, allDay, color};
+            return new Object[]{
+                    id, title, location, begin, end, allDay, color, calendarName
+            };
         }
     }
 

@@ -8,9 +8,10 @@ final class AgendaEvent {
     final long end;
     final boolean allDay;
     final int color;
+    final String calendarName;
 
     AgendaEvent(long id, String title, String location, long begin, long end,
-                boolean allDay, int color) {
+                boolean allDay, int color, String calendarName) {
         this.id = id;
         this.title = title;
         this.location = location;
@@ -18,5 +19,6 @@ final class AgendaEvent {
         this.end = end;
         this.allDay = allDay;
         this.color = color;
+        this.calendarName = calendarName;
     }
 }
