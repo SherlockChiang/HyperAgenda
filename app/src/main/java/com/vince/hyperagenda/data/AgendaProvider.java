@@ -16,6 +16,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.CalendarContract;
+import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -25,6 +26,7 @@ import java.util.PriorityQueue;
 import java.util.Set;
 
 public final class AgendaProvider extends ContentProvider {
+    private static final String TAG = "HyperAgenda";
     private static final Uri[] CALENDAR_OBSERVED_URIS = {
             CalendarContract.Events.CONTENT_URI,
             CalendarContract.Instances.CONTENT_URI,
@@ -139,8 +141,8 @@ public final class AgendaProvider extends ContentProvider {
                     CalendarContract.Instances.SELF_ATTENDEE_STATUS);
             int calendarIdIndex =
                     cursor.getColumnIndexOrThrow(CalendarContract.Instances.CALENDAR_ID);
-            int calendarNameIndex = cursor.getColumnIndexOrThrow(
-                    CalendarContract.Instances.CALENDAR_DISPLAY_NAME);
+            int calendarNameIndex =
+                    cursor.getColumnIndex(CalendarContract.Instances.CALENDAR_DISPLAY_NAME);
             Comparator<CalendarRow> earliestFirst = Comparator
                     .comparingLong((CalendarRow row) -> row.begin)
                     .thenComparingLong(row -> row.id);
@@ -166,7 +168,10 @@ public final class AgendaProvider extends ContentProvider {
                 String location = hideLocation || rawLocation == null
                         ? ""
                         : collapseWhitespace(rawLocation);
-                String calendarName = collapseWhitespace(cursor.getString(calendarNameIndex));
+                // Older calendar providers may not expose the calendar name; the label is optional.
+                String calendarName = calendarNameIndex < 0
+                        ? ""
+                        : collapseWhitespace(cursor.getString(calendarNameIndex));
                 CalendarRow row = new CalendarRow(
                         cursor.getLong(idIndex),
                         redacted ? "" : title,
@@ -185,8 +190,10 @@ public final class AgendaProvider extends ContentProvider {
             }
             snapshot.rows.addAll(rows);
             snapshot.rows.sort(earliestFirst);
-        } catch (SecurityException ignored) {
-            // Permission may have been revoked while the provider was alive.
+        } catch (RuntimeException error) {
+            // A revoked permission or an unexpected provider response must never cross the binder
+            // boundary: the lockscreen simply stays empty.
+            Log.w(TAG, "agenda instances query failed", error);
         }
         snapshot.nextEventAt = snapshot.rows.isEmpty() ? 0L : snapshot.rows.get(0).begin;
         return snapshot;
