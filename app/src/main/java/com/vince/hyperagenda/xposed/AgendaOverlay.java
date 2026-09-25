@@ -21,6 +21,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -579,65 +580,14 @@ final class AgendaOverlay {
         }
 
         long now = System.currentTimeMillis();
+        Locale locale = Locale.getDefault();
         for (int i = 0; i < events.size(); i++) {
             AgendaEvent event = events.get(i);
-            AgendaTimeFormatter.Label label =
-                    AgendaTimeFormatter.describe(event, now, Locale.getDefault());
-            LinearLayout row = new LinearLayout(context);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(context, 12), dp(context, 9), dp(context, 12), dp(context, 9));
-            row.setClickable(openOnLockscreenClick);
-            row.setFocusable(openOnLockscreenClick);
-            row.setBackground(openOnLockscreenClick
-                    ? createRippleBackground(context) : null);
-            if (openOnLockscreenClick) {
-                row.setOnClickListener(v -> openCalendarEvent(context, event));
-            }
-
-            View colorBar = new View(context);
-            GradientDrawable barBackground = new GradientDrawable();
-            barBackground.setColor(event.color == 0 ? Color.rgb(93, 168, 255) : opaque(event.color));
-            barBackground.setCornerRadius(dp(context, 2));
-            colorBar.setBackground(barBackground);
-            LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
-                    dp(context, 3), dp(context, 38));
-            barParams.rightMargin = dp(context, 12);
-            row.addView(colorBar, barParams);
-
-            LinearLayout textColumn = new LinearLayout(context);
-            textColumn.setOrientation(LinearLayout.VERTICAL);
-
-            LinearLayout headline = new LinearLayout(context);
-            headline.setOrientation(LinearLayout.HORIZONTAL);
-            headline.setGravity(Gravity.CENTER_VERTICAL);
-            TextView time = createText(context, label.headline, TextRole.TIME);
-            LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            timeParams.rightMargin = dp(context, 10);
-            headline.addView(time, timeParams);
-
-            TextView title = createText(context, event.title, TextRole.TITLE);
-            title.setMaxLines(1);
-            title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            headline.addView(title, new LinearLayout.LayoutParams(
-                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            textColumn.addView(headline);
-
-            if (event.location != null && !event.location.isEmpty()) {
-                TextView location = createText(
-                        context, "地点 · " + event.location, TextRole.LOCATION);
-                location.setMaxLines(1);
-                location.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                LinearLayout.LayoutParams locationParams = new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                locationParams.topMargin = dp(context, 3);
-                textColumn.addView(location, locationParams);
-            }
-            row.addView(textColumn, new LinearLayout.LayoutParams(
-                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            row.setContentDescription(describeForAccessibility(label, event));
-            overlay.addView(row, rowParams(context, i == 0 ? 0 : 2, 0));
+            AgendaTimeFormatter.Label label = AgendaTimeFormatter.describe(event, now, locale);
+            boolean primary = i == 0;
+            overlay.addView(
+                    createRow(context, event, label, primary, openOnLockscreenClick),
+                    rowParams(context, primary ? 0 : 6, 0));
         }
 
         ViewGroup root = layoutRootRef.get();
@@ -1092,6 +1042,127 @@ final class AgendaOverlay {
         }
     }
 
+    /**
+     * The next event is the headline: relative time, then the title as the main visual, then
+     * location and calendar as supporting information. Further events stay on one compact line so
+     * the lockscreen never turns into a list.
+     */
+    private static LinearLayout createRow(Context context, AgendaEvent event,
+                                          AgendaTimeFormatter.Label label, boolean primary,
+                                          boolean openOnClick) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(context, 12), dp(context, primary ? 10 : 8),
+                dp(context, 12), dp(context, primary ? 10 : 8));
+        row.setClickable(openOnClick);
+        row.setFocusable(openOnClick);
+        row.setBackground(openOnClick ? createRippleBackground(context) : null);
+        if (openOnClick) {
+            row.setOnClickListener(v -> openCalendarEvent(context, event));
+        }
+        row.addView(primary
+                        ? createHeadlineColumn(context, event, label)
+                        : createCompactLine(context, event, label),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.setContentDescription(describeForAccessibility(label, event));
+        return row;
+    }
+
+    private static LinearLayout createHeadlineColumn(Context context, AgendaEvent event,
+                                                     AgendaTimeFormatter.Label label) {
+        LinearLayout column = new LinearLayout(context);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.addView(createText(context, label.headline, TextRole.TIME));
+
+        TextView title = createText(context, event.title, TextRole.TITLE);
+        title.setMaxLines(2);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        column.addView(title, textLineParams(context, 2));
+
+        String meta = metaText(event, label);
+        if (!meta.isEmpty()) {
+            LinearLayout metaLine = new LinearLayout(context);
+            metaLine.setOrientation(LinearLayout.HORIZONTAL);
+            metaLine.setGravity(Gravity.CENTER_VERTICAL);
+            metaLine.addView(createColorDot(context, event), dotParams(context));
+
+            TextView metaView = createText(context, meta, TextRole.META);
+            metaView.setMaxLines(1);
+            metaView.setEllipsize(TextUtils.TruncateAt.END);
+            metaLine.addView(metaView, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            column.addView(metaLine, textLineParams(context, 3));
+        }
+        return column;
+    }
+
+    private static LinearLayout createCompactLine(Context context, AgendaEvent event,
+                                                  AgendaTimeFormatter.Label label) {
+        LinearLayout line = new LinearLayout(context);
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView time = createText(context, label.headline, TextRole.COMPACT_TIME);
+        time.setMaxLines(1);
+        time.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        timeParams.rightMargin = dp(context, 10);
+        line.addView(time, timeParams);
+
+        TextView title = createText(context, event.title, TextRole.COMPACT_TITLE);
+        title.setMaxLines(1);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        line.addView(title, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        return line;
+    }
+
+    private static View createColorDot(Context context, AgendaEvent event) {
+        View dot = new View(context);
+        GradientDrawable background = new GradientDrawable();
+        background.setShape(GradientDrawable.OVAL);
+        background.setColor(event.color == 0 ? Color.rgb(93, 168, 255) : opaque(event.color));
+        dot.setBackground(background);
+        return dot;
+    }
+
+    private static LinearLayout.LayoutParams dotParams(Context context) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                dp(context, 8), dp(context, 8));
+        params.rightMargin = dp(context, 6);
+        return params;
+    }
+
+    private static LinearLayout.LayoutParams textLineParams(Context context, int topMarginDp) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(context, topMarginDp);
+        return params;
+    }
+
+    private static String metaText(AgendaEvent event, AgendaTimeFormatter.Label label) {
+        StringBuilder meta = new StringBuilder();
+        if (event.location != null && !event.location.isEmpty()) {
+            meta.append(event.location);
+        }
+        if (label.endNote != null) {
+            appendMeta(meta, label.endNote);
+        }
+        return meta.toString();
+    }
+
+    private static void appendMeta(StringBuilder meta, String value) {
+        if (value == null || value.isEmpty()) {
+            return;
+        }
+        if (meta.length() > 0) {
+            meta.append(" · ");
+        }
+        meta.append(value);
+    }
+
     private static String describeForAccessibility(AgendaTimeFormatter.Label label,
                                                    AgendaEvent event) {
         StringBuilder description = new StringBuilder(label.headline);
@@ -1161,9 +1232,11 @@ final class AgendaOverlay {
     }
 
     private enum TextRole {
-        TIME(0.88f, 0.90f),
-        TITLE(1f, 1f),
-        LOCATION(0.82f, 0.80f);
+        TIME(0.80f, 0.72f),
+        TITLE(1.06f, 1f),
+        META(0.82f, 0.78f),
+        COMPACT_TIME(0.80f, 0.70f),
+        COMPACT_TITLE(0.94f, 0.90f);
 
         final float sizeScale;
         final float alphaScale;
