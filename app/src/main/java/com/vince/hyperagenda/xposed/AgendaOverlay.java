@@ -58,6 +58,7 @@ final class AgendaOverlay {
     private static final long FADE_OUT_MS = 160L;
     private static final float FADE_FRAME_MS = 16f;
     private static final float FADE_MAX_FRAME_MS = 80f;
+    private static final float FOOTER_TIME_WIDTH_RATIO = 0.58f;
     private static final long BOUNCER_SCAN_INTERVAL_MS = 50L;
     private static final String KEYGUARD_INFO_LAYER_VIEW_ID = "keyguard_info_layer";
     private static final String FOREGROUND_CLOCK_CONTAINER_VIEW_ID =
@@ -1153,37 +1154,48 @@ final class AgendaOverlay {
         return row;
     }
 
+    /**
+     * The next event owns two rows: the title on top, then the relative time at the start of the
+     * second row and the location at its end. No calendar or account label is shown.
+     */
     private static LinearLayout createHeadlineColumn(Context context, AgendaEvent event,
                                                      AgendaTimeFormatter.Label label,
                                                      String title) {
         LinearLayout column = new LinearLayout(context);
         column.setOrientation(LinearLayout.VERTICAL);
-        column.addView(createText(context, label.headline, TextRole.TIME));
 
         if (!title.isEmpty()) {
             TextView titleView = createText(context, title, TextRole.TITLE);
             titleView.setMaxLines(2);
             titleView.setEllipsize(TextUtils.TruncateAt.END);
-            column.addView(titleView, textLineParams(context, 2));
+            column.addView(titleView);
         }
 
-        String meta = metaText(event, label);
-        if (!meta.isEmpty()) {
-            LinearLayout metaLine = new LinearLayout(context);
-            metaLine.setOrientation(LinearLayout.HORIZONTAL);
-            metaLine.setGravity(Gravity.CENTER_VERTICAL);
-            if (hasCalendarName(event)) {
-                // The dot carries the calendar colour so identical titles stay distinguishable.
-                metaLine.addView(createColorDot(context, event), dotParams(context));
-            }
+        LinearLayout footer = new LinearLayout(context);
+        footer.setOrientation(LinearLayout.HORIZONTAL);
+        footer.setGravity(Gravity.CENTER_VERTICAL);
 
-            TextView metaView = createText(context, meta, TextRole.META);
+        TextView time = createText(context, label.headline, TextRole.TIME);
+        time.setMaxLines(1);
+        time.setEllipsize(TextUtils.TruncateAt.END);
+        // The time keeps its half of the row so a long label never squeezes the location away.
+        time.setMaxWidth(Math.round(context.getResources().getDisplayMetrics().widthPixels
+                * FOOTER_TIME_WIDTH_RATIO));
+        footer.addView(time, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        String trailing = trailingText(event, label);
+        if (!trailing.isEmpty()) {
+            TextView metaView = createText(context, trailing, TextRole.META);
             metaView.setMaxLines(1);
             metaView.setEllipsize(TextUtils.TruncateAt.END);
-            metaLine.addView(metaView, new LinearLayout.LayoutParams(
-                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            column.addView(metaLine, textLineParams(context, 3));
+            metaView.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
+            LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            metaParams.setMarginStart(dp(context, 12));
+            footer.addView(metaView, metaParams);
         }
+        column.addView(footer, textLineParams(context, title.isEmpty() ? 0 : 3));
         return column;
     }
 
@@ -1216,22 +1228,6 @@ final class AgendaOverlay {
         return "有 " + Math.max(1, eventCount) + " 项日程";
     }
 
-    private static View createColorDot(Context context, AgendaEvent event) {
-        View dot = new View(context);
-        GradientDrawable background = new GradientDrawable();
-        background.setShape(GradientDrawable.OVAL);
-        background.setColor(event.color == 0 ? Color.rgb(93, 168, 255) : opaque(event.color));
-        dot.setBackground(background);
-        return dot;
-    }
-
-    private static LinearLayout.LayoutParams dotParams(Context context) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                dp(context, 8), dp(context, 8));
-        params.setMarginEnd(dp(context, 6));
-        return params;
-    }
-
     private static LinearLayout.LayoutParams textLineParams(Context context, int topMarginDp) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1239,40 +1235,45 @@ final class AgendaOverlay {
         return params;
     }
 
-    private static String metaText(AgendaEvent event, AgendaTimeFormatter.Label label) {
-        StringBuilder meta = new StringBuilder();
+    /** End of the second row: location and calendar, plus the end time of a cross-day event. */
+    private static String trailingText(AgendaEvent event, AgendaTimeFormatter.Label label) {
+        StringBuilder trailing = new StringBuilder();
         if (event.location != null && !event.location.isEmpty()) {
-            meta.append(event.location);
+            trailing.append(event.location);
         }
         if (hasCalendarName(event)) {
-            appendMeta(meta, event.calendarName);
+            appendTrailing(trailing, event.calendarName);
         }
         if (label.endNote != null) {
-            appendMeta(meta, label.endNote);
+            appendTrailing(trailing, label.endNote);
         }
-        return meta.toString();
+        return trailing.toString();
     }
 
     private static boolean hasCalendarName(AgendaEvent event) {
         return event.calendarName != null && !event.calendarName.isEmpty();
     }
 
-    private static void appendMeta(StringBuilder meta, String value) {
+    private static void appendTrailing(StringBuilder trailing, String value) {
         if (value == null || value.isEmpty()) {
             return;
         }
-        if (meta.length() > 0) {
-            meta.append(" · ");
+        if (trailing.length() > 0) {
+            trailing.append(" · ");
         }
-        meta.append(value);
+        trailing.append(value);
     }
 
     private static String describeForAccessibility(AgendaTimeFormatter.Label label,
                                                    AgendaEvent event, String title) {
-        StringBuilder description = new StringBuilder(label.headline);
+        StringBuilder description = new StringBuilder();
         if (title != null && !title.isEmpty()) {
-            description.append('，').append(title);
+            description.append(title);
         }
+        if (description.length() > 0) {
+            description.append('，');
+        }
+        description.append(label.headline);
         if (event.location != null && !event.location.isEmpty()) {
             description.append("，地点 ").append(event.location);
         }
@@ -1358,10 +1359,6 @@ final class AgendaOverlay {
         params.topMargin = dp(context, top);
         params.bottomMargin = dp(context, bottom);
         return params;
-    }
-
-    private static int opaque(int color) {
-        return Color.rgb(Color.red(color), Color.green(color), Color.blue(color));
     }
 
     private static int dp(Context context, int value) {
