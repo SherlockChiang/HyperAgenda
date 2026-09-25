@@ -34,10 +34,8 @@ import android.widget.TextView;
 import com.vince.hyperagenda.data.AgendaContract;
 
 import java.lang.ref.WeakReference;
-import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -583,6 +581,8 @@ final class AgendaOverlay {
         long now = System.currentTimeMillis();
         for (int i = 0; i < events.size(); i++) {
             AgendaEvent event = events.get(i);
+            AgendaTimeFormatter.Label label =
+                    AgendaTimeFormatter.describe(event, now, Locale.getDefault());
             LinearLayout row = new LinearLayout(context);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
@@ -611,7 +611,7 @@ final class AgendaOverlay {
             LinearLayout headline = new LinearLayout(context);
             headline.setOrientation(LinearLayout.HORIZONTAL);
             headline.setGravity(Gravity.CENTER_VERTICAL);
-            TextView time = createText(context, formatStart(event, now), TextRole.TIME);
+            TextView time = createText(context, label.headline, TextRole.TIME);
             LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             timeParams.rightMargin = dp(context, 10);
@@ -636,9 +636,7 @@ final class AgendaOverlay {
             }
             row.addView(textColumn, new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            row.setContentDescription(formatStart(event, now) + "，" + event.title
-                    + (event.location == null || event.location.isEmpty()
-                    ? "" : "，地点 " + event.location));
+            row.setContentDescription(describeForAccessibility(label, event));
             overlay.addView(row, rowParams(context, i == 0 ? 0 : 2, 0));
         }
 
@@ -1094,18 +1092,19 @@ final class AgendaOverlay {
         }
     }
 
-    private static String formatStart(AgendaEvent event, long now) {
-        Locale locale = Locale.getDefault();
-        if (event.allDay) {
-            return "全天";
+    private static String describeForAccessibility(AgendaTimeFormatter.Label label,
+                                                   AgendaEvent event) {
+        StringBuilder description = new StringBuilder(label.headline);
+        if (event.title != null && !event.title.isEmpty()) {
+            description.append('，').append(event.title);
         }
-        if (event.begin <= now && event.end > now) {
-            return "现在";
+        if (event.location != null && !event.location.isEmpty()) {
+            description.append("，地点 ").append(event.location);
         }
-        SimpleDateFormat day = new SimpleDateFormat("yyyyMMdd", locale);
-        String pattern = day.format(new Date(event.begin)).equals(day.format(new Date(now)))
-                ? "HH:mm" : "M/d HH:mm";
-        return new SimpleDateFormat(pattern, locale).format(new Date(event.begin));
+        if (label.endNote != null) {
+            description.append('，').append(label.endNote);
+        }
+        return description.toString();
     }
 
     private static void openCalendarEvent(Context context, AgendaEvent event) {
