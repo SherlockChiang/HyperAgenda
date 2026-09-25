@@ -593,17 +593,17 @@ class MainActivity : ComponentActivity() {
         PrivacyOption(
             mode = AgendaContract.PRIVACY_FULL,
             title = "锁屏显示完整信息",
-            summary = "显示标题、地点和日历名称",
+            summary = "显示日程名称和地点",
         ),
         PrivacyOption(
             mode = AgendaContract.PRIVACY_NO_LOCATION,
             title = "隐藏地点",
-            summary = "显示标题和日历名称，不显示地点",
+            summary = "只显示日程名称，不显示地点",
         ),
         PrivacyOption(
             mode = AgendaContract.PRIVACY_SUMMARY,
             title = "只显示「有日程」",
-            summary = "锁屏只提示有日程，不显示标题和地点",
+            summary = "锁屏只提示有日程，不显示名称和地点",
         ),
         PrivacyOption(
             mode = AgendaContract.PRIVACY_AFTER_AUTH,
