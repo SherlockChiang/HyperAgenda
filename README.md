@@ -2,6 +2,19 @@
 
 一个面向 Xiaomi HyperOS 4 的实验性 LSPosed 模块，在系统锁屏上以 Pixel At a Glance 风格显示接下来的日历日程。
 
+## 应用图标
+
+<img src="docs/icon.png" alt="HyperAgenda 应用图标" width="144">
+
+图标是单个 VectorDrawable（[`ic_launcher.xml`](app/src/main/res/drawable/ic_launcher.xml)，108 × 108 viewport），由 `AndroidManifest.xml` 的 `android:icon` 直接引用，未使用自适应图标的前景/背景分层：
+
+- HyperOS 蓝圆角方块（`#2F80ED`，顶部 `#4C9AFF` 高光），贴近系统图标观感。
+- 白色日历本体（`#FFFFFF`，表头 `#DCEEFF`）配两枚装订环，表达日程本身。
+- 日历内的蓝色条目标记对应锁屏的两行布局：上排完整条目，下排压缩后的其余日程。
+- 右下角浅蓝表盘（`#B9F2FF` 底盘、`#1877D2` 指针）强调「下一条日程」这一核心信息。
+
+`docs/icon.png` 是按同一几何渲染出的 512 px 预览，供文档使用；矢量改动后需要同步重新生成。
+
 ## 工作方式
 
 - 应用进程持有 `READ_CALENDAR` 权限并查询 `CalendarContract.Instances`。
