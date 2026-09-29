@@ -9,7 +9,9 @@ android {
     signingConfigs {
         release {
             // Keep the release artifact upgrade-compatible with the installed module.
-            storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
+            def releaseKeystore = findProperty('releaseKeystore')
+                    ?: "${System.getProperty('user.home')}/.android/debug.keystore"
+            storeFile file(releaseKeystore)
             storePassword 'android'
             keyAlias 'androiddebugkey'
             keyPassword 'android'
