@@ -1,4 +1,4 @@
-package com.vince.hyperagenda.xposed;
+package io.github.sherlockchiang.hyperagenda.xposed;
 
 final class AgendaEvent {
     final long id;

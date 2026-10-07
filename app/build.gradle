@@ -3,27 +3,50 @@ apply plugin: 'org.jetbrains.kotlin.android'
 apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 android {
-    namespace 'com.vince.hyperagenda'
+    namespace 'io.github.sherlockchiang.hyperagenda'
     compileSdkVersion 'android-37.0'
 
     signingConfigs {
         release {
-            // Keep the release artifact upgrade-compatible with the installed module.
-            def releaseKeystore = findProperty('releaseKeystore')
-                    ?: "${System.getProperty('user.home')}/.android/debug.keystore"
-            storeFile file(releaseKeystore)
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
+            // Keep the existing signing identity when changing the application ID. SIGNING_*
+            // environment variables or Gradle properties can explicitly select that keystore.
+            def storeFilePath = System.getenv('SIGNING_STORE_FILE')
+                    ?: findProperty('releaseStoreFile')
+                    ?: findProperty('releaseKeystore')
+            def storePwd = System.getenv('SIGNING_STORE_PASSWORD')
+                    ?: findProperty('releaseStorePassword')
+            def signingAlias = System.getenv('SIGNING_KEY_ALIAS')
+                    ?: findProperty('releaseKeyAlias')
+            def keyPwd = System.getenv('SIGNING_KEY_PASSWORD')
+                    ?: findProperty('releaseKeyPassword')
+
+            if (storeFilePath) {
+                if (!storePwd || !signingAlias || !keyPwd) {
+                    throw new GradleException(
+                            "Release signing is only half configured for ${storeFilePath}: " +
+                                    'also set SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS and ' +
+                                    'SIGNING_KEY_PASSWORD, or run scripts/setup-release-signing.ps1.')
+                }
+                storeFile file(storeFilePath)
+                storePassword storePwd
+                keyAlias signingAlias
+                keyPassword keyPwd
+            } else {
+                logger.lifecycle('No release keystore configured, signing the release build with the debug key.')
+                storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
         }
     }
 
     defaultConfig {
-        applicationId 'com.vince.hyperagenda'
+        applicationId 'io.github.sherlockchiang.hyperagenda'
         minSdk 26
         targetSdk 34
-        versionCode 21
-        versionName '0.6.1'
+        versionCode 22
+        versionName '0.6.2'
     }
 
     buildTypes {

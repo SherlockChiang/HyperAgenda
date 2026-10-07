@@ -1,1 +1,1 @@
--keep class com.vince.hyperagenda.xposed.** { *; }
+-keep class io.github.sherlockchiang.hyperagenda.xposed.** { *; }

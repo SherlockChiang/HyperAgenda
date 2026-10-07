@@ -1,4 +1,4 @@
-package com.vince.hyperagenda.xposed;
+package io.github.sherlockchiang.hyperagenda.xposed;
 
 import android.app.KeyguardManager;
 import android.content.BroadcastReceiver;
@@ -33,7 +33,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import com.vince.hyperagenda.data.AgendaContract;
+import io.github.sherlockchiang.hyperagenda.data.AgendaContract;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayDeque;

@@ -33,7 +33,7 @@
 
         <provider
             android:name=".data.AgendaProvider"
-            android:authorities="com.vince.hyperagenda.schedule"
+            android:authorities="io.github.sherlockchiang.hyperagenda.schedule"
             android:exported="true"
             android:grantUriPermissions="false"
             tools:ignore="ExportedContentProvider" />

@@ -1,4 +1,4 @@
-package com.vince.hyperagenda.data;
+package io.github.sherlockchiang.hyperagenda.data;
 
 import android.content.SharedPreferences;
 import android.net.Uri;
@@ -7,7 +7,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 public final class AgendaContract {
-    public static final String AUTHORITY = "com.vince.hyperagenda.schedule";
+    public static final String AUTHORITY = "io.github.sherlockchiang.hyperagenda.schedule";
     public static final Uri CONTENT_URI = Uri.parse("content://" + AUTHORITY + "/agenda");
 
     public static final String PREFS = "agenda_settings";

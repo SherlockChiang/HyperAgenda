@@ -1,4 +1,4 @@
-package com.vince.hyperagenda
+package io.github.sherlockchiang.hyperagenda
 
 import android.Manifest
 import android.content.Context
@@ -40,7 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
-import com.vince.hyperagenda.data.AgendaContract
+import io.github.sherlockchiang.hyperagenda.data.AgendaContract
 import java.text.DateFormat
 import java.util.Date
 import kotlin.math.roundToInt

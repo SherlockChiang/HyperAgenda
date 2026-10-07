@@ -1,4 +1,4 @@
-package com.vince.hyperagenda.xposed;
+package io.github.sherlockchiang.hyperagenda.xposed;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;

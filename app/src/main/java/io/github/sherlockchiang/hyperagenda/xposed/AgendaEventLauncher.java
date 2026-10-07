@@ -1,4 +1,4 @@
-package com.vince.hyperagenda.xposed;
+package io.github.sherlockchiang.hyperagenda.xposed;
 
 import android.app.PendingIntent;
 import android.content.ContentUris;

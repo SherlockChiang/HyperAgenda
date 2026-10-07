@@ -49,6 +49,16 @@ $env:ANDROID_HOME = 'C:\Users\your-name\AppData\Local\Android\Sdk'
 
 ## 安装
 
+### 从旧包名迁移（0.6.2）
+
+为符合 LSPosed 模块仓库的包名归属要求，0.6.2 起使用
+`io.github.sherlockchiang.hyperagenda`，原包名为 `com.vince.hyperagenda`。
+继续使用 0.6.1 的签名密钥，但 Android 会将新包名作为独立应用安装，无法覆盖旧应用，设置也不会自动迁移。
+
+请先在 LSPosed 中停用旧模块，记录需要保留的设置，再安装并启用新版、重新授予日历权限。
+确认作用域只勾选系统界面，重启系统界面或手机；验证新版正常后可卸载旧应用。
+同时启用两个版本可能重复注入锁屏日程。
+
 1. 安装 APK 并授予日历读取权限。
 2. 在 LSPosed 中启用“锁屏日程”。
 3. 作用域只选择“系统界面 (`com.android.systemui`)”。

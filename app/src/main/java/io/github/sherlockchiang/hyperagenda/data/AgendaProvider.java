@@ -1,4 +1,4 @@
-package com.vince.hyperagenda.data;
+package io.github.sherlockchiang.hyperagenda.data;
 
 import android.Manifest;
 import android.app.KeyguardManager;
