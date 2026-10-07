@@ -27,3 +27,6 @@ qa-*.xml
 # Generated binaries and logs
 *.log
 *.hprof
+
+# Release signing material
+*.p12
